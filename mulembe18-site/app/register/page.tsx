@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser, SignInButton, SignUpButton } from "@clerk/nextjs";
 import {
   Users,
   ShieldCheck,
@@ -20,6 +20,7 @@ import {
   User,
   ArrowLeft,
   AlertCircle,
+  LogIn,
 } from "lucide-react";
 
 const clans = [
@@ -69,6 +70,18 @@ export default function RegisterPage() {
     profession: "",
   });
 
+  // Prefill when Clerk user is already authenticated
+  useEffect(() => {
+    if (isLoaded && isSignedIn && user) {
+      setForm((prev) => ({
+        ...prev,
+        fullName: prev.fullName || user.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+        email: prev.email || user.primaryEmailAddress?.emailAddress || "",
+        phone: prev.phone || user.primaryPhoneNumber?.phoneNumber || "",
+      }));
+    }
+  }, [isLoaded, isSignedIn, user]);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -101,7 +114,7 @@ export default function RegisterPage() {
     const newErrors: Record<string, string> = {};
 
     if (!form.fullName.trim() || form.fullName.trim().length < 2) {
-      newErrors.fullName = "Please provide your full legal or preferred name (at least 2 characters).";
+      newErrors.fullName = "Please provide your full name (at least 2 characters).";
     }
 
     if (!form.email && !form.phone) {
@@ -109,32 +122,35 @@ export default function RegisterPage() {
     }
 
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = "Please enter a valid email address (e.g., name@domain.com).";
+      newErrors.email = "Please enter a valid email address.";
     }
 
     if (form.phone) {
       const cleanPhone = form.phone.replace(/\s+/g, "");
       if (!/^(\+?254|0)[17]\d{8}$/.test(cleanPhone)) {
-        newErrors.phone = "Enter a valid Kenyan mobile number (e.g., 0712 345678 or +254 712 345678).";
+        newErrors.phone = "Enter a valid Kenyan mobile number (e.g. 0712 345678).";
       }
     }
 
-    if (!form.password) {
-      newErrors.password = "A secure password is required.";
-    } else if (form.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters long.";
-    } else if (!/[A-Z]/.test(form.password)) {
-      newErrors.password = "Password must contain at least one uppercase letter (A-Z).";
-    } else if (!/[0-9]/.test(form.password)) {
-      newErrors.password = "Password must contain at least one numeric digit (0-9).";
-    }
+    // Only validate password if user is not already logged in with Clerk
+    if (!isSignedIn) {
+      if (!form.password) {
+        newErrors.password = "A password is required for your account login.";
+      } else if (form.password.length < 8) {
+        newErrors.password = "Password must be at least 8 characters long.";
+      } else if (!/[A-Z]/.test(form.password)) {
+        newErrors.password = "Password must contain at least one uppercase letter (A-Z).";
+      } else if (!/[0-9]/.test(form.password)) {
+        newErrors.password = "Password must contain at least one numeric digit (0-9).";
+      }
 
-    if (form.password && form.confirmPassword !== form.password) {
-      newErrors.confirmPassword = "Passwords do not match.";
+      if (form.password && form.confirmPassword !== form.password) {
+        newErrors.confirmPassword = "Passwords do not match.";
+      }
     }
 
     if (!form.subcounty) {
-      newErrors.subcounty = "Please select your subcounty / coastal residential zone.";
+      newErrors.subcounty = "Please select your subcounty / residential zone.";
     }
 
     if (!form.subClan) {
@@ -165,6 +181,7 @@ export default function RegisterPage() {
           residentialZone: form.subcounty,
           subClan: form.subClan,
           profession: form.profession || "Community Member",
+          clerkId: user?.id || undefined,
         }),
       });
 
@@ -192,42 +209,11 @@ export default function RegisterPage() {
     }
   };
 
-  // If already logged in
-  if (isLoaded && isSignedIn) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-50/50 via-white to-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl border border-emerald-100 p-8 shadow-xl text-center space-y-6">
-          <div className="w-16 h-16 mx-auto bg-emerald-100 rounded-2xl flex items-center justify-center text-[#0D6E38]">
-            <CheckCircle2 size={36} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-[#18221B]" style={{ fontFamily: "var(--font-outfit)" }}>
-              Already Logged In!
-            </h1>
-            <p className="text-sm text-gray-500 mt-2">
-              You are currently signed in as <span className="font-bold text-[#0D6E38]">{user?.fullName || user?.primaryEmailAddress?.emailAddress}</span>.
-            </p>
-          </div>
-          <div className="pt-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-bold text-sm shadow-md transition-all"
-            >
-              <span>Go to Member Dashboard</span>
-              <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Registration Success Card
   if (registrationSuccess) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-emerald-50/60 via-white to-gray-50 flex items-center justify-center p-4 sm:p-6">
         <div className="max-w-lg w-full bg-white rounded-3xl border border-emerald-200/80 p-6 sm:p-10 shadow-2xl space-y-6 relative overflow-hidden">
-          {/* Decorative background glow */}
           <div className="absolute top-0 right-0 -mr-16 -mt-16 w-44 h-44 bg-emerald-100/60 rounded-full blur-2xl pointer-events-none" />
 
           <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-[#0D6E38] mx-auto shadow-inner">
@@ -236,13 +222,13 @@ export default function RegisterPage() {
 
           <div className="text-center space-y-2">
             <span className="inline-block px-3 py-1 bg-emerald-100 text-[#0D6E38] rounded-full text-xs font-black uppercase tracking-wider">
-              Registration Successful
+              Registration Complete
             </span>
             <h2 className="text-2xl sm:text-3xl font-black text-[#18221B]" style={{ fontFamily: "var(--font-outfit)" }}>
               Mulembe, {registrationSuccess.fullName}!
             </h2>
             <p className="text-xs sm:text-sm text-gray-500">
-              Your member registry profile has been created and indexed under the Mombasa Coastal Chapter.
+              Your account has been created in Clerk and indexed into the Mulembe18 Coastal Chapter.
             </p>
           </div>
 
@@ -268,12 +254,22 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-3 pt-2">
-            <SignInButton mode="modal">
-              <button className="w-full py-4 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-black text-sm shadow-md hover:shadow-xl transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 cursor-pointer">
-                <span>Sign In to Access Dashboard</span>
+            {isSignedIn ? (
+              <Link
+                href="/dashboard"
+                className="w-full py-4 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-black text-sm shadow-md hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              >
+                <span>Go to Member Dashboard</span>
                 <ArrowRight size={16} />
-              </button>
-            </SignInButton>
+              </Link>
+            ) : (
+              <SignInButton mode="modal">
+                <button className="w-full py-4 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-black text-sm shadow-md hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer">
+                  <span>Sign In with Your New Account</span>
+                  <ArrowRight size={16} />
+                </button>
+              </SignInButton>
+            )}
 
             <Link
               href="/"
@@ -313,11 +309,44 @@ export default function RegisterPage() {
                   Join Mulembe18 Coastal Chapter
                 </h1>
                 <p className="text-xs sm:text-sm text-emerald-100/90">
-                  Register your membership across the 18 Luhya sub-communities in Mombasa.
+                  {isSignedIn
+                    ? "Complete your community profile and subcounty affiliation."
+                    : "Register your membership across the 18 Luhya sub-communities in Mombasa."}
                 </p>
               </div>
             </div>
           </div>
+
+          {/* Social Sign Up / Clerk Connect */}
+          {!isSignedIn && (
+            <div className="p-6 sm:px-8 pb-0">
+              <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[#0D6E38] text-white flex items-center justify-center font-bold text-xs">
+                    <Sparkles size={14} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-800">Quick Sign-Up via Clerk</div>
+                    <div className="text-[11px] text-gray-500">Sign up with Google or social login in 1 click</div>
+                  </div>
+                </div>
+                <SignUpButton mode="modal">
+                  <button className="px-4 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 text-xs font-bold shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <LogIn size={13} className="text-[#0D6E38]" />
+                    <span>Sign up with Clerk</span>
+                  </button>
+                </SignUpButton>
+              </div>
+
+              <div className="relative flex py-4 items-center">
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="flex-shrink mx-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  or complete standard form
+                </span>
+                <div className="flex-grow border-t border-gray-200"></div>
+              </div>
+            </div>
+          )}
 
           {/* Form Body */}
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5" noValidate>
@@ -325,6 +354,13 @@ export default function RegisterPage() {
               <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-700">
                 <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-rose-500" />
                 <span>{errors.form}</span>
+              </div>
+            )}
+
+            {isSignedIn && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-xs text-[#0D6E38] font-bold">
+                <CheckCircle2 size={16} />
+                <span>Signed in as {user?.primaryEmailAddress?.emailAddress}</span>
               </div>
             )}
 
@@ -354,7 +390,7 @@ export default function RegisterPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Email Address <span className="text-gray-400 font-normal">(Optional if phone given)</span>
+                  Email Address <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
@@ -365,6 +401,7 @@ export default function RegisterPage() {
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="you@domain.com"
+                    disabled={Boolean(isSignedIn && user?.primaryEmailAddress?.emailAddress)}
                     className={`w-full pl-10 pr-3.5 py-3 rounded-xl border text-xs sm:text-sm bg-gray-50/50 focus:bg-white transition-all outline-hidden ${
                       errors.email ? "border-rose-300 focus:border-rose-500 ring-2 ring-rose-100" : "border-gray-200 focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100"
                     }`}
@@ -464,77 +501,79 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Password & Confirm Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Password <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                    <Lock size={16} />
-                  </div>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder="Min. 8 characters"
-                    className={`w-full pl-10 pr-10 py-3 rounded-xl border text-xs sm:text-sm bg-gray-50/50 focus:bg-white transition-all outline-hidden ${
-                      errors.password ? "border-rose-300 focus:border-rose-500 ring-2 ring-rose-100" : "border-gray-200 focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {form.password && (
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${passwordStrength.color} transition-all duration-300`}
-                        style={{ width: `${(passwordStrength.score / 4) * 100}%` }}
-                      />
+            {/* Password & Confirm Password (only shown if NOT already logged into Clerk) */}
+            {!isSignedIn && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                    Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <Lock size={16} />
                     </div>
-                    <span className="text-[10px] font-bold text-gray-500">{passwordStrength.label}</span>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      placeholder="Min. 8 characters"
+                      className={`w-full pl-10 pr-10 py-3 rounded-xl border text-xs sm:text-sm bg-gray-50/50 focus:bg-white transition-all outline-hidden ${
+                        errors.password ? "border-rose-300 focus:border-rose-500 ring-2 ring-rose-100" : "border-gray-200 focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
-                )}
-                {errors.password && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.password}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Confirm Password <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                    <Lock size={16} />
-                  </div>
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={form.confirmPassword}
-                    onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                    placeholder="Repeat password"
-                    className={`w-full pl-10 pr-10 py-3 rounded-xl border text-xs sm:text-sm bg-gray-50/50 focus:bg-white transition-all outline-hidden ${
-                      errors.confirmPassword ? "border-rose-300 focus:border-rose-500 ring-2 ring-rose-100" : "border-gray-200 focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
-                  >
-                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  {form.password && (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${passwordStrength.color} transition-all duration-300`}
+                          style={{ width: `${(passwordStrength.score / 4) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-500">{passwordStrength.label}</span>
+                    </div>
+                  )}
+                  {errors.password && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.password}</p>}
                 </div>
-                {errors.confirmPassword && (
-                  <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.confirmPassword}</p>
-                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                    Confirm Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={form.confirmPassword}
+                      onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                      placeholder="Repeat password"
+                      className={`w-full pl-10 pr-10 py-3 rounded-xl border text-xs sm:text-sm bg-gray-50/50 focus:bg-white transition-all outline-hidden ${
+                        errors.confirmPassword ? "border-rose-300 focus:border-rose-500 ring-2 ring-rose-100" : "border-gray-200 focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && (
+                    <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.confirmPassword}</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="pt-2">
               <button
@@ -545,7 +584,7 @@ export default function RegisterPage() {
                 {loading ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Creating Membership...</span>
+                    <span>Creating & Linking Account...</span>
                   </>
                 ) : (
                   <>
@@ -572,4 +611,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { query, initDatabaseSchema } from "@/lib/db";
+import { clerkClient } from "@clerk/nextjs/server";
 import crypto from "crypto";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
 function hashPassword(plain: string): string {
-  // PBKDF2 – no extra deps, available in Node.js built-in crypto
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto
     .pbkdf2Sync(plain, salt, 100_000, 64, "sha256")
@@ -31,7 +31,6 @@ function validateEmail(email: string): boolean {
 }
 
 function validatePhone(phone: string): boolean {
-  // Allow Kenyan formats: 07xx, 01xx, +2547xx, 2547xx
   return /^(\+?254|0)[17]\d{8}$/.test(phone.replace(/\s/g, ""));
 }
 
@@ -49,9 +48,10 @@ export async function POST(req: Request) {
       subClan,
       residentialZone,
       profession,
+      clerkId: providedClerkId,
     } = body;
 
-    // ── 1. Required-field validation ──────────────────────────────
+    // ── 1. Validation ─────────────────────────────────────────────
     const errors: Record<string, string> = {};
 
     if (!fullName || fullName.trim().length < 2)
@@ -64,13 +64,19 @@ export async function POST(req: Request) {
       errors.phone = "Please enter a valid Kenyan phone number (e.g. 0712 345678).";
     if (!subClan) errors.subClan = "Please select your sub-clan / subcounty.";
     if (!residentialZone) errors.residentialZone = "Please select your residential zone.";
-    if (!password) errors.password = "Password is required.";
-    else {
-      const pwErr = validatePassword(password);
-      if (pwErr) errors.password = pwErr;
+
+    // Password validation if not already authenticated via Clerk
+    if (!providedClerkId) {
+      if (!password) {
+        errors.password = "Password is required.";
+      } else {
+        const pwErr = validatePassword(password);
+        if (pwErr) errors.password = pwErr;
+      }
+      if (password && confirmPassword !== password) {
+        errors.confirmPassword = "Passwords do not match.";
+      }
     }
-    if (password && confirmPassword !== password)
-      errors.confirmPassword = "Passwords do not match.";
 
     if (Object.keys(errors).length > 0) {
       return NextResponse.json({ success: false, errors }, { status: 400 });
@@ -78,45 +84,144 @@ export async function POST(req: Request) {
 
     await initDatabaseSchema();
 
-    // ── 2. Uniqueness checks ──────────────────────────────────────
-    if (email) {
+    // ── 2. Database Uniqueness checks ─────────────────────────────
+    const normalEmail = email ? email.toLowerCase().trim() : null;
+    const normalPhone = phone ? phone.replace(/\s/g, "") : null;
+
+    if (normalEmail) {
       const existing = await query<any>(
-        "SELECT id FROM members WHERE email = ? LIMIT 1",
-        [email.toLowerCase().trim()]
+        "SELECT id, clerk_id FROM members WHERE email = ? LIMIT 1",
+        [normalEmail]
       );
-      if (existing.length > 0)
+      if (existing.length > 0 && !providedClerkId) {
         return NextResponse.json(
-          { success: false, errors: { email: "This email is already registered. Please sign in." } },
+          { success: false, errors: { email: "This email is already registered in Mulembe18. Please sign in." } },
           { status: 409 }
         );
+      }
     }
 
-    if (phone) {
-      const normalPhone = phone.replace(/\s/g, "");
+    if (normalPhone) {
       const existing = await query<any>(
         "SELECT id FROM members WHERE phone = ? LIMIT 1",
         [normalPhone]
       );
-      if (existing.length > 0)
+      if (existing.length > 0 && !providedClerkId) {
         return NextResponse.json(
           { success: false, errors: { phone: "This phone number is already registered. Please sign in." } },
           { status: 409 }
         );
+      }
     }
 
-    // ── 3. Create member ──────────────────────────────────────────
+    // ── 3. Create Account Directly in Clerk (Approach 1) ──────────
+    let finalClerkId: string | null = providedClerkId || null;
+
+    if (!finalClerkId && normalEmail && password) {
+      try {
+        const client = await clerkClient();
+        const nameParts = fullName.trim().split(/\s+/);
+        const firstName = nameParts[0] || "Member";
+        const lastName = nameParts.slice(1).join(" ") || undefined;
+
+        // Check if user already exists in Clerk
+        const existingUsers = await client.users.getUserList({
+          emailAddress: [normalEmail],
+        });
+
+        if (existingUsers.data && existingUsers.data.length > 0) {
+          finalClerkId = existingUsers.data[0].id;
+        } else {
+          // Derive safe username (required by instance)
+          let baseUsername = normalEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 18);
+          if (baseUsername.length < 4) baseUsername = `${baseUsername}_m18`;
+
+          let createdUser = null;
+          try {
+            createdUser = await client.users.createUser({
+              emailAddress: [normalEmail],
+              username: baseUsername,
+              password: password,
+              firstName,
+              lastName,
+            });
+          } catch (unameErr: any) {
+            // If username is taken, try with unique suffix
+            const altUsername = `${baseUsername.slice(0, 14)}_${Math.floor(1000 + Math.random() * 9000)}`;
+            createdUser = await client.users.createUser({
+              emailAddress: [normalEmail],
+              username: altUsername,
+              password: password,
+              firstName,
+              lastName,
+            });
+          }
+
+          if (createdUser) {
+            finalClerkId = createdUser.id;
+          }
+        }
+      } catch (clerkErr: any) {
+        console.warn("[Register API] Clerk account creation error:", clerkErr?.message || clerkErr);
+        if (clerkErr?.errors?.[0]) {
+          const cErr = clerkErr.errors[0];
+          const param = cErr.meta?.paramName || "password";
+          const msg = cErr.longMessage || cErr.message || "Account creation failed in Clerk.";
+          return NextResponse.json(
+            { success: false, errors: { [param]: msg } },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // ── 4. Insert / Update into members table ─────────────────────
     const membershipNo = generateMembershipNo();
-    const passwordHash = hashPassword(password);
-    const normalPhone = phone ? phone.replace(/\s/g, "") : null;
+    const passwordHash = password ? hashPassword(password) : null;
+
+    if (normalEmail) {
+      const existing = await query<any>(
+        "SELECT id FROM members WHERE email = ? LIMIT 1",
+        [normalEmail]
+      );
+      if (existing.length > 0) {
+        await query(
+          `UPDATE members
+           SET clerk_id = COALESCE(?, clerk_id),
+               full_name = ?,
+               phone = COALESCE(?, phone),
+               sub_clan = ?,
+               residential_zone = ?,
+               profession = ?
+           WHERE id = ?`,
+          [
+            finalClerkId,
+            fullName.trim(),
+            normalPhone,
+            subClan,
+            residentialZone,
+            profession || "Community Member",
+            existing[0].id,
+          ]
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: "Profile updated successfully!",
+          membershipNo,
+        });
+      }
+    }
 
     await query(
       `INSERT INTO members
-         (full_name, email, phone, sub_clan, residential_zone, profession,
+         (clerk_id, full_name, email, phone, sub_clan, residential_zone, profession,
           membership_no, password_hash, role, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'member', 'Verified')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'member', 'Verified')`,
       [
+        finalClerkId,
         fullName.trim(),
-        email ? email.toLowerCase().trim() : null,
+        normalEmail,
         normalPhone,
         subClan,
         residentialZone,
@@ -139,4 +244,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
