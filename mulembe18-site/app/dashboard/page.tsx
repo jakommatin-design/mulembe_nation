@@ -49,7 +49,6 @@ const Badge = ({ status }: { status: string }) => {
 export default function DashboardPage() {
   const { user } = useUser();
   const [mounted, setMounted] = useState(false);
-  const [role, setRole] = useState<DashboardRole>("member");
   const [memberTab, setMemberTab] = useState<MemberTab>("overview");
   const [adminTab, setAdminTab] = useState<AdminTab>("analytics");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -177,6 +176,8 @@ export default function DashboardPage() {
 
   // Derived
   const currentMember = useMemo(() => membersList.find(m => (user?.primaryEmailAddress?.emailAddress && m.email?.toLowerCase() === user.primaryEmailAddress.emailAddress.toLowerCase())), [membersList, user]);
+  const isSuperAdmin = useMemo(() => currentMember?.role === "super_admin", [currentMember]);
+  const role: DashboardRole = isSuperAdmin ? "admin" : "member";
   const userContributions = useMemo(() => contributionsList.filter(c => currentMember && (c.member_name?.toLowerCase().includes(currentMember.full_name?.toLowerCase().split(" ")[0]) || (currentMember.phone && c.phone === currentMember.phone))), [contributionsList, currentMember]);
   const userTotalContributed = useMemo(() => userContributions.reduce((s, c) => s + (Number(c.amount) || 0), 0), [userContributions]);
   const hasPaidDues = useMemo(() => userContributions.some(c => c.purpose?.toLowerCase().includes("dues") || c.purpose?.toLowerCase().includes("membership") || (Number(c.amount) >= 500 && c.status === "Completed")), [userContributions]);
@@ -363,12 +364,48 @@ export default function DashboardPage() {
                 </Link>
                 <button type="button" onClick={() => setIsCollapsed(true)} className="hidden md:flex p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-emerald-300 cursor-pointer"><PanelLeftClose size={13} /></button>
               </div>
-              <div className="p-0.5 rounded-xl bg-black/30 border border-emerald-900/70 grid grid-cols-2 gap-0.5">
-                {(["member", "admin"] as DashboardRole[]).map(r => (
-                  <button type="button" key={r} onClick={() => { setRole(r); setMobileMenuOpen(false); }} className={`py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${role === r ? (r === "admin" ? "bg-[#0D6E38] text-white" : "bg-[#DDA71D] text-[#082f1a]") : "text-emerald-300/60 hover:text-white"}`}>
-                    {r === "member" ? <><Users size={10} />Member</> : <><Shield size={10} />Admin</>}
-                  </button>
-                ))}
+              <div className="px-2.5 py-1.5 rounded-xl bg-black/30 border border-emerald-900/70 flex items-center gap-2">
+                {role === "admin" ? (
+                  <>
+                    <Shield size={13} className="text-[#DDA71D] flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Super Admin</div>
+                      <div className="text-[9px] text-[#DDA71D] font-semibold truncate">County Governance</div>
+                    </div>
+                  </>
+                ) : currentMember?.role === "ward_leader" ? (
+                  <>
+                    <Crown size={13} className="text-amber-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Ward Leader</div>
+                      <div className="text-[9px] text-amber-300 font-semibold truncate">{currentMember.ward_leader_ward || currentMember.ward || "Ward"}</div>
+                    </div>
+                  </>
+                ) : currentMember?.role === "area_leader" ? (
+                  <>
+                    <MapPin size={13} className="text-emerald-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Area Leader</div>
+                      <div className="text-[9px] text-emerald-300 font-semibold truncate">{currentMember.area_name || "Local Area"}</div>
+                    </div>
+                  </>
+                ) : currentMember?.role === "subcounty_admin" ? (
+                  <>
+                    <Building size={13} className="text-blue-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Subcounty Admin</div>
+                      <div className="text-[9px] text-blue-300 font-semibold truncate">{currentMember.subcounty_admin_zone || currentMember.subcounty || "Subcounty"}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Users size={13} className="text-emerald-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Member Portal</div>
+                      <div className="text-[9px] text-emerald-300/80 font-semibold truncate">Mulembe18 Coastal Pulse</div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -376,8 +413,14 @@ export default function DashboardPage() {
               <Link href="/"><div className="w-9 h-9 rounded-xl overflow-hidden bg-white/10 border border-[#DDA71D]/40 p-0.5"><img src="/images/logo.png" alt="Mulembe18" className="w-full h-full object-contain rounded-lg" /></div></Link>
               <button type="button" onClick={() => setIsCollapsed(false)} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 text-emerald-300 flex items-center justify-center cursor-pointer"><PanelLeftOpen size={13} /></button>
               <div className="w-full flex flex-col items-center gap-1 pt-1 border-t border-emerald-900/60">
-                <button type="button" onClick={() => setRole("member")} className={`w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer ${role === "member" ? "bg-[#DDA71D] text-[#082f1a]" : "text-emerald-300 hover:bg-white/5"}`}><Users size={13} /></button>
-                <button type="button" onClick={() => setRole("admin")} className={`w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer ${role === "admin" ? "bg-[#0D6E38] text-white" : "text-emerald-300 hover:bg-white/5"}`}><Shield size={13} /></button>
+                <div
+                  title={role === "admin" ? "County Governance Console" : "Member Portal"}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    role === "admin" ? "bg-[#0D6E38] text-[#DDA71D]" : "bg-white/10 text-emerald-300"
+                  }`}
+                >
+                  {role === "admin" ? <Shield size={14} /> : <Users size={14} />}
+                </div>
               </div>
             </div>
           )}
@@ -388,37 +431,70 @@ export default function DashboardPage() {
           {currentNav.map(item => <NavItem key={item.id} item={item} />)}
 
           {/* Quick Leadership Dashboards (Role-based) */}
-          {!isCollapsed && currentMember && (currentMember.role === "ward_leader" || currentMember.role === "area_leader" || currentMember.role === "subcounty_admin") && (
+          {!isCollapsed && (
             <div className="pt-2 mt-2 border-t border-emerald-900/60 space-y-1">
-              <div className="text-[9px] uppercase font-bold tracking-widest text-amber-400/80 px-2 py-1 flex items-center gap-1">
-                <Crown size={9} /> My Leadership Consoles
-              </div>
-              {currentMember.role === "ward_leader" && (
-                <Link
-                  href="/ward-dashboard"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
-                >
-                  <Crown size={12} className="text-amber-400 flex-shrink-0" />
-                  <span className="truncate">Ward Leader Console</span>
-                </Link>
+              {role === "admin" && (
+                <>
+                  <div className="text-[9px] uppercase font-bold tracking-widest text-[#DDA71D] px-2 py-1 flex items-center gap-1">
+                    <Shield size={9} /> Management Consoles
+                  </div>
+                  <Link
+                    href="/subcounty-dashboard"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-400/10 hover:bg-blue-400/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold transition-all"
+                  >
+                    <Building size={12} className="text-blue-400 flex-shrink-0" />
+                    <span className="truncate">Subcounty Console</span>
+                  </Link>
+                  <Link
+                    href="/ward-dashboard"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
+                  >
+                    <Crown size={12} className="text-amber-400 flex-shrink-0" />
+                    <span className="truncate">Ward Leader Console</span>
+                  </Link>
+                  <Link
+                    href="/area-dashboard"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
+                  >
+                    <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
+                    <span className="truncate">Area Leader Console</span>
+                  </Link>
+                </>
               )}
-              {currentMember.role === "area_leader" && (
-                <Link
-                  href="/area-dashboard"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
-                >
-                  <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
-                  <span className="truncate">Area Leader Console</span>
-                </Link>
-              )}
-              {currentMember.role === "subcounty_admin" && (
-                <Link
-                  href="/subcounty-dashboard"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-400/10 hover:bg-blue-400/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold transition-all"
-                >
-                  <Building size={12} className="text-blue-400 flex-shrink-0" />
-                  <span className="truncate">Subcounty Console</span>
-                </Link>
+
+              {role === "member" && currentMember && (currentMember.role === "ward_leader" || currentMember.role === "area_leader" || currentMember.role === "subcounty_admin") && (
+                <>
+                  <div className="text-[9px] uppercase font-bold tracking-widest text-amber-400/80 px-2 py-1 flex items-center gap-1">
+                    <Crown size={9} /> My Leadership Consoles
+                  </div>
+                  {currentMember.role === "ward_leader" && (
+                    <Link
+                      href="/ward-dashboard"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
+                    >
+                      <Crown size={12} className="text-amber-400 flex-shrink-0" />
+                      <span className="truncate">Ward Leader Console</span>
+                    </Link>
+                  )}
+                  {currentMember.role === "area_leader" && (
+                    <Link
+                      href="/area-dashboard"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
+                    >
+                      <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
+                      <span className="truncate">Area Leader Console</span>
+                    </Link>
+                  )}
+                  {currentMember.role === "subcounty_admin" && (
+                    <Link
+                      href="/subcounty-dashboard"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-400/10 hover:bg-blue-400/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold transition-all"
+                    >
+                      <Building size={12} className="text-blue-400 flex-shrink-0" />
+                      <span className="truncate">Subcounty Console</span>
+                    </Link>
+                  )}
+                </>
               )}
             </div>
           )}
