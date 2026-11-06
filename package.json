@@ -2,9 +2,12 @@
   "name": "mulembe18-workspace",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "mulembe18-site"
+  ],
   "scripts": {
     "dev": "npm --prefix mulembe18-site run dev",
-    "build": "npm --prefix mulembe18-site run build",
+    "build": "npm --prefix mulembe18-site install && npm --prefix mulembe18-site run build",
     "start": "npm --prefix mulembe18-site run start"
   }
 }

@@ -206,11 +206,10 @@ export default function EventsSection() {
                 <button
                   key={tab}
                   onClick={() => setSelectedCat(tab)}
-                  className={`px-4 py-2 rounded-full text-xs font-bold transition-all shadow-xs ${
-                    selectedCat === tab
+                  className={`px-4 py-2 rounded-full text-xs font-bold transition-all shadow-xs ${selectedCat === tab
                       ? "bg-[#0D6E38] text-white shadow-sm ring-2 ring-[#0D6E38]/20"
                       : "bg-white text-gray-700 border border-[#E6E0D5] hover:border-emerald-300"
-                  }`}
+                    }`}
                   style={{ fontFamily: "var(--font-outfit)" }}
                 >
                   {tab === "All" ? `All Events (${events.length})` : tab}
