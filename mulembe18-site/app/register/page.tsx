@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useUser, SignInButton, SignUpButton } from "@clerk/nextjs";
+import { useUser, SignInButton } from "@clerk/nextjs";
 import {
   Users,
   ShieldCheck,
@@ -20,7 +20,6 @@ import {
   User,
   ArrowLeft,
   AlertCircle,
-  LogIn,
 } from "lucide-react";
 
 const clans = [
@@ -317,38 +316,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Social Sign Up / Clerk Connect */}
-          {!isSignedIn && (
-            <div className="p-6 sm:px-8 pb-0">
-              <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-[#0D6E38] text-white flex items-center justify-center font-bold text-xs">
-                    <Sparkles size={14} />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-800">Quick Sign-Up via Clerk</div>
-                    <div className="text-[11px] text-gray-500">Sign up with Google or social login in 1 click</div>
-                  </div>
-                </div>
-                <SignUpButton mode="modal">
-                  <button className="px-4 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 text-xs font-bold shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                    <LogIn size={13} className="text-[#0D6E38]" />
-                    <span>Sign up with Clerk</span>
-                  </button>
-                </SignUpButton>
-              </div>
-
-              <div className="relative flex py-4 items-center">
-                <div className="flex-grow border-t border-gray-200"></div>
-                <span className="flex-shrink mx-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                  or complete standard form
-                </span>
-                <div className="flex-grow border-t border-gray-200"></div>
-              </div>
-            </div>
-          )}
-
-          {/* Form Body */}
+          {/* Form Body - Mandatory Community & Clan Affiliation */}
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5" noValidate>
             {errors.form && (
               <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-700">
