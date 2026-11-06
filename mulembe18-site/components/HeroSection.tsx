@@ -1,5 +1,7 @@
 "use client";
+import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 import Marquee from "@/components/magicui/marquee";
 
 const clans = [
@@ -24,6 +26,7 @@ const clans = [
 ];
 
 export default function HeroSection() {
+  const { isSignedIn } = useAuth();
   return (
     <section
       id="home"
@@ -162,13 +165,23 @@ export default function HeroSection() {
 
         {/* CTAs in Odoo Minimalist Pill Style */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-7 sm:pt-9 relative">
-          <a
-            href="#register"
-            className="group relative inline-flex items-center gap-2.5 px-8 py-3.5 sm:px-9 sm:py-4 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-extrabold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
-          >
-            <span>Join Our Community</span>
-            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-          </a>
+          {isSignedIn ? (
+            <Link
+              href="/dashboard"
+              className="group relative inline-flex items-center gap-2.5 px-8 py-3.5 sm:px-9 sm:py-4 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-extrabold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
+            >
+              <span>Go to Member Dashboard</span>
+              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+            </Link>
+          ) : (
+            <Link
+              href="/register"
+              className="group relative inline-flex items-center gap-2.5 px-8 py-3.5 sm:px-9 sm:py-4 rounded-full bg-[#0D6E38] hover:bg-[#09522a] text-white font-extrabold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
+            >
+              <span>Join Our Community</span>
+              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+            </Link>
+          )}
 
 
 

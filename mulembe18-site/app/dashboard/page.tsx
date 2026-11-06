@@ -8,7 +8,7 @@ import {
   LogOut, Smartphone, Shield, HeartHandshake, Heart, Landmark, Megaphone,
   BarChart3, Receipt, Ticket, AlertCircle, Menu, X, Compass, PanelLeftClose,
   PanelLeftOpen, MapPin, Check, Star, Trash2, PlusCircle, CalendarDays,
-  RefreshCw, Image as ImageIcon, Edit3, Crown, TrendingUp,
+  RefreshCw, Image as ImageIcon, Edit3, Crown, TrendingUp, Building,
 } from "lucide-react";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import NumberTicker from "@/components/magicui/number-ticker";
@@ -109,6 +109,12 @@ export default function DashboardPage() {
   const [payPhone, setPayPhone] = useState("");
   const [payStatus, setPayStatus] = useState<"idle" | "sending" | "success">("idle");
 
+  // Subcounty Admin Role Management
+  const [roleModalMember, setRoleModalMember] = useState<any | null>(null);
+  const [assignedRole, setAssignedRole] = useState<string>("member");
+  const [assignedZone, setAssignedZone] = useState<string>("Nyali");
+  const [assigningRole, setAssigningRole] = useState(false);
+
   // Fetchers
   const fetchAllEvents = async () => { setLoadingEvents(true); try { const r = await fetch("/api/events"); const d = await r.json(); if (d.success) setEventsList(d.events || []); } catch {} finally { setLoadingEvents(false); } };
   const fetchAllNews = async () => { setLoadingNews(true); try { const r = await fetch("/api/news"); const d = await r.json(); if (d.success) setNewsList(d.articles || []); } catch {} finally { setLoadingNews(false); } };
@@ -170,6 +176,34 @@ export default function DashboardPage() {
   const handleDeleteClaim = async (id: any) => { if (!confirm("Remove record?")) return; const r = await fetch(`/api/welfare?id=${id}`, { method: "DELETE" }); const d = await r.json(); if (d.success) fetchAllClaims(); };
   const handleVerifyMember = async (id: any) => { const r = await fetch("/api/members", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: "Verified" }) }); const d = await r.json(); if (d.success) fetchAllMembers(); };
   const handleDeleteMember = async (id: any) => { if (!confirm("Remove member?")) return; const r = await fetch(`/api/members?id=${id}`, { method: "DELETE" }); const d = await r.json(); if (d.success) fetchAllMembers(); };
+  const handleAssignRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleModalMember) return;
+    setAssigningRole(true);
+    try {
+      const res = await fetch("/api/admin/assign-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetMemberId: roleModalMember.id,
+          newRole: assignedRole,
+          subcountyZone: assignedRole === "subcounty_admin" ? assignedZone : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "Role updated successfully!");
+        setRoleModalMember(null);
+        fetchAllMembers();
+      } else {
+        alert(data.message || "Failed to update role.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setAssigningRole(false);
+    }
+  };
   const handleDeleteContribution = async (id: any) => { if (!confirm("Remove record?")) return; const r = await fetch(`/api/contributions?id=${id}`, { method: "DELETE" }); const d = await r.json(); if (d.success) fetchAllContributions(); };
   const handleAddContribution = async (e: React.FormEvent) => { e.preventDefault(); const r = await fetch("/api/contributions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(contribForm) }); const d = await r.json(); if (d.success) { setAddContribModal(false); setContribForm({ memberName: "", phone: "", amount: "", purpose: "Annual Dues" }); fetchAllContributions(); } else alert(d.message); };
   const handleCreateAppeal = async (e: React.FormEvent) => { e.preventDefault(); const r = await fetch("/api/appeals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(appealForm) }); const d = await r.json(); if (d.success) { setCreateAppealModal(false); setAppealForm({ title: "", familyName: "", location: "", goalAmount: "", raisedAmount: "0", description: "" }); fetchAllAppeals(); } else alert(d.message); };
@@ -706,8 +740,18 @@ export default function DashboardPage() {
           {role === "admin" && adminTab === "members" && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm animate-fade-in">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div><h3 className="text-sm font-bold">Member Registry & Verification</h3><p className="text-[11px] text-gray-400">{membersList.length} registered · Live KYC verification</p></div>
-                <div className="flex gap-2">
+                <div>
+                  <h3 className="text-sm font-bold">Member Registry & Role Management</h3>
+                  <p className="text-[11px] text-gray-400">{membersList.length} registered · Live KYC & Subcounty Admin assignment</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href="/subcounty-dashboard"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0D6E38] text-xs font-bold transition-colors"
+                  >
+                    <Building size={13} />
+                    <span>Open Subcounty Portal</span>
+                  </Link>
                   <button type="button" onClick={fetchAllMembers} className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"><RefreshCw size={13} className={loadingMembers ? "animate-spin" : ""} /></button>
                   <button type="button" onClick={() => alert(`Exporting ${membersList.length} members as CSV...`)} className={btnPrimary}><Download size={13} />Export CSV</button>
                 </div>
@@ -716,16 +760,52 @@ export default function DashboardPage() {
                 {loadingMembers ? <div className="flex justify-center py-10"><Spinner /></div> : membersList.length === 0 ? <EmptyState icon={Users} title="No Members Registered" body="Members register through the main website. Profiles appear here automatically." /> : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead><tr className="border-b border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-wide"><th className="py-2.5 px-3 text-left">Member</th><th className="py-2.5 px-3 text-left">Sub-Clan</th><th className="py-2.5 px-3 text-left">Zone</th><th className="py-2.5 px-3 text-left">Phone</th><th className="py-2.5 px-3 text-center">Status</th><th className="py-2.5 px-3 text-right">Actions</th></tr></thead>
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-wide">
+                          <th className="py-2.5 px-3 text-left">Member</th>
+                          <th className="py-2.5 px-3 text-left">Sub-Clan</th>
+                          <th className="py-2.5 px-3 text-left">Zone / Subcounty</th>
+                          <th className="py-2.5 px-3 text-left">Role / Level</th>
+                          <th className="py-2.5 px-3 text-left">Phone</th>
+                          <th className="py-2.5 px-3 text-center">Status</th>
+                          <th className="py-2.5 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-gray-50">
                         {membersList.map(m => (
                           <tr key={m.id} className="hover:bg-gray-50/70">
                             <td className="py-3 px-3"><div className="font-bold text-gray-900">{m.full_name}</div><div className="font-mono text-[9px] text-gray-400">{m.membership_no || `MLB-${m.id}`}</div></td>
                             <td className="py-3 px-3 text-gray-600">{m.sub_clan}</td>
                             <td className="py-3 px-3 text-gray-500">{m.residential_zone}</td>
+                            <td className="py-3 px-3">
+                              {m.role === "super_admin" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700">
+                                  <Crown size={10} /> Super Admin
+                                </span>
+                              ) : m.role === "subcounty_admin" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700">
+                                  <Building size={10} /> {m.subcounty_admin_zone || "Subcounty"} Admin
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
+                                  Member
+                                </span>
+                              )}
+                            </td>
                             <td className="py-3 px-3 font-mono text-gray-500">{m.phone}</td>
                             <td className="py-3 px-3 text-center"><Badge status={m.status || "Verified"} /></td>
-                            <td className="py-3 px-3 text-right">
+                            <td className="py-3 px-3 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRoleModalMember(m);
+                                  setAssignedRole(m.role || "member");
+                                  setAssignedZone(m.subcounty_admin_zone || m.residential_zone || "Nyali");
+                                }}
+                                className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold mr-1 cursor-pointer"
+                              >
+                                Role
+                              </button>
                               {m.status !== "Verified" && <button type="button" onClick={() => handleVerifyMember(m.id)} className="px-2 py-0.5 rounded-lg bg-emerald-50 text-[#0D6E38] hover:bg-emerald-100 text-[10px] font-bold mr-1 cursor-pointer">Verify</button>}
                               <button type="button" onClick={() => handleDeleteMember(m.id)} className="p-1 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"><Trash2 size={12} /></button>
                             </td>
@@ -1144,6 +1224,92 @@ export default function DashboardPage() {
               </div>
               <div><label className="block font-semibold text-gray-700 mb-1">Short Bio (optional)</label><textarea rows={2} value={leaderForm.bio} onChange={e => setLeaderForm({ ...leaderForm, bio: e.target.value })} placeholder="Brief background..." className={inputCls} /></div>
               <div className="flex gap-2 pt-1"><button type="button" onClick={() => { setCreateLeaderModal(false); setEditingLeader(null); }} className={btnSecondary + " flex-1 justify-center"}>Cancel</button><button type="submit" className={btnPrimary + " flex-1 justify-center"}>{editingLeader ? "Update Leader" : "Add Leader"}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASSIGN ROLE */}
+      {roleModalMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white max-w-sm w-full rounded-2xl p-5 shadow-2xl border border-gray-200">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <h4 className="font-bold text-sm text-gray-900">Manage Member Role</h4>
+                <p className="text-[10px] text-gray-400">
+                  {roleModalMember.full_name} ({roleModalMember.membership_no || `ID: ${roleModalMember.id}`})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoleModalMember(null)}
+                className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignRole} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1.5">Assigned System Role</label>
+                <select
+                  value={assignedRole}
+                  onChange={(e) => setAssignedRole(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="member">Regular Member</option>
+                  <option value="subcounty_admin">Subcounty Admin</option>
+                  <option value="super_admin">Super Administrator</option>
+                </select>
+              </div>
+
+              {assignedRole === "subcounty_admin" && (
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1.5">
+                    Subcounty Jurisdiction <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={assignedZone}
+                    onChange={(e) => setAssignedZone(e.target.value)}
+                    className={inputCls}
+                  >
+                    {[
+                      "Nyali",
+                      "Bamburi",
+                      "Mombasa Island (Mvita)",
+                      "Likoni Channel",
+                      "Changamwe",
+                      "Kisauni",
+                      "Mtwapa North",
+                      "Jomvu",
+                    ].map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    This admin will only have access to members registered within this subcounty.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRoleModalMember(null)}
+                  className={btnSecondary + " flex-1 justify-center"}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assigningRole}
+                  className={btnPrimary + " flex-1 justify-center"}
+                >
+                  {assigningRole ? "Saving..." : "Save Role"}
+                </button>
+              </div>
             </form>
           </div>
         </div>

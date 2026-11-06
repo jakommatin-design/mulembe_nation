@@ -290,10 +290,10 @@ export default function WelfareSection() {
                 <div className="p-3 bg-[#F7F4EE] rounded-xl border border-[#E6E0D5] flex items-center justify-between text-xs">
                   <div>
                     <span className="text-gray-500">Paybill: </span>
-                    <strong className="text-gray-900 font-mono">522522</strong>
+                    <strong className="text-gray-900 font-mono">coming soon</strong>
                     <span className="mx-2 text-gray-300">|</span>
                     <span className="text-gray-500">Acc: </span>
-                    <strong className="text-gray-900 font-mono">1289456#NAME</strong>
+                    <strong className="text-gray-900 font-mono">coming soon</strong>
                   </div>
                   <button
                     type="button" onClick={handleCopyPaybill}

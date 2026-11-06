@@ -213,6 +213,16 @@ export async function initDatabaseSchema() {
       await db.execute("ALTER TABLE gallery_items ADD COLUMN album_url TEXT NULL;");
     } catch {}
 
+    // Ensure subcounty_admin_zone column exists (for subcounty admin role enforcement)
+    try {
+      await db.execute("ALTER TABLE members ADD COLUMN subcounty_admin_zone VARCHAR(100) NULL;");
+    } catch {}
+
+    // Ensure password_hash column exists (for custom registration flow)
+    try {
+      await db.execute("ALTER TABLE members ADD COLUMN password_hash VARCHAR(255) NULL;");
+    } catch {}
+
     // Seed gallery items if empty
     const [galleryCount]: any = await db.execute("SELECT COUNT(*) AS count FROM gallery_items");
     if (galleryCount?.[0]?.count === 0) {

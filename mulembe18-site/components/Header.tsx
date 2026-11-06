@@ -97,15 +97,16 @@ export default function Header() {
               ) : (
                 <>
                   <SignInButton mode="modal">
-                    <button className="px-2.5 xl:px-3.5 py-1.5 text-xs font-bold text-gray-700 hover:text-[#0D6E38] transition-colors whitespace-nowrap">
+                    <button className="px-2.5 xl:px-3.5 py-1.5 text-xs font-bold text-gray-700 hover:text-[#0D6E38] transition-colors whitespace-nowrap cursor-pointer">
                       Sign in
                     </button>
                   </SignInButton>
-                  <SignUpButton mode="modal">
-                    <button className="px-3.5 xl:px-4 py-2 bg-[#0D6E38] hover:bg-[#09522a] text-white font-bold text-xs rounded-full shadow-xs hover:shadow-md transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0">
-                      Join Community
-                    </button>
-                  </SignUpButton>
+                  <Link
+                    href="/register"
+                    className="px-3.5 xl:px-4 py-2 bg-[#0D6E38] hover:bg-[#09522a] text-white font-bold text-xs rounded-full shadow-xs hover:shadow-md transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0"
+                  >
+                    Join Community
+                  </Link>
                 </>
               )}
 
@@ -151,19 +152,18 @@ export default function Header() {
                     <SignInButton mode="modal">
                       <button
                         onClick={handleNavClick}
-                        className="flex-1 py-2 text-sm font-semibold text-center text-gray-700 border border-gray-300 rounded-full hover:border-[#0D6E38] transition-colors"
+                        className="flex-1 py-2 text-sm font-semibold text-center text-gray-700 border border-gray-300 rounded-full hover:border-[#0D6E38] transition-colors cursor-pointer"
                       >
                         Sign In
                       </button>
                     </SignInButton>
-                    <SignUpButton mode="modal">
-                      <button
-                        onClick={handleNavClick}
-                        className="flex-1 py-2 text-sm font-bold text-center text-white bg-[#0D6E38] rounded-full hover:bg-[#09522a] transition-colors shadow-xs"
-                      >
-                        Join Now
-                      </button>
-                    </SignUpButton>
+                    <Link
+                      href="/register"
+                      onClick={handleNavClick}
+                      className="flex-1 py-2 text-sm font-bold text-center text-white bg-[#0D6E38] rounded-full hover:bg-[#09522a] transition-colors shadow-xs"
+                    >
+                      Join Now
+                    </Link>
                   </>
                 )}
               </div>
