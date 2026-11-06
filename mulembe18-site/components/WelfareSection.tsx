@@ -135,8 +135,11 @@ export default function WelfareSection() {
             <span className="relative inline-block mx-1">
               <span>and Need.</span>
               <svg
-                className="absolute -bottom-2 left-0 w-full overflow-visible pointer-events-none"
-                viewBox="0 0 160 12" fill="none"
+                className="absolute -bottom-2 left-0 w-full pointer-events-none"
+                style={{ height: "10px", width: "100%", maxHeight: "10px" }}
+                viewBox="0 0 160 12"
+                preserveAspectRatio="none"
+                fill="none"
               >
                 <path d="M 4 8 Q 45 12 85 7 Q 125 3 156 9" stroke="#00AEEF" strokeWidth="4" strokeLinecap="round" />
               </svg>

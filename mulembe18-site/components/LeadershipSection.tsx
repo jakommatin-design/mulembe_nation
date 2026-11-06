@@ -71,8 +71,10 @@ export default function LeadershipSection() {
           {/* Cyan doodle underline */}
           <div className="flex justify-center -mt-1 mb-2">
             <svg
-              className="w-56 h-3 overflow-visible pointer-events-none"
+              className="w-56 h-3 pointer-events-none"
+              style={{ height: "12px", width: "224px", maxHeight: "12px" }}
               viewBox="0 0 160 12"
+              preserveAspectRatio="none"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >

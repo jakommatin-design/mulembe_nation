@@ -1,35 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Plus_Jakarta_Sans, Caveat, Outfit, Kalam } from "next/font/google";
 import "./globals.css";
-
-const plusJakartaSans = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-jakarta",
-  display: "swap",
-});
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  weight: ["700", "800"],
-  variable: "--font-outfit",
-  display: "swap",
-});
-
-const caveat = Caveat({
-  subsets: ["latin"],
-  weight: ["600", "700"],
-  variable: "--font-caveat",
-  display: "swap",
-});
-
-const kalam = Kalam({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-kalam",
-  display: "swap",
-});
 
 export const viewport: Viewport = {
   themeColor: "#0D6E38",
@@ -68,10 +39,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${plusJakartaSans.variable} ${outfit.variable} ${caveat.variable} ${kalam.variable} scroll-smooth`}
-    >
+    <html lang="en" className="scroll-smooth">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Kalam:wght@400;700&family=Outfit:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body
         style={{ fontFamily: "var(--font-jakarta), sans-serif" }}
         className="selection:bg-[#0D6E38] selection:text-white"

@@ -84,8 +84,10 @@ export default function GallerySection() {
             {/* Cyan doodle underline */}
             <div className="relative max-w-xs -mt-1 mb-2">
               <svg
-                className="w-48 h-3 overflow-visible pointer-events-none"
+                className="w-48 h-3 pointer-events-none"
+                style={{ height: "12px", width: "192px", maxHeight: "12px" }}
                 viewBox="0 0 160 12"
+                preserveAspectRatio="none"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >

@@ -2,7 +2,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$RepoUrl = "https://github.com/jakommatin-design/mulembe18.git"
+$RepoUrl = "https://github.com/jakommatin-design/mulembe_nation.git"
 $Branch = "main"
 
 try {
@@ -10,7 +10,7 @@ try {
         throw "Git is not installed."
     }
 
-    Set-Location "C:\Users\Admin\Downloads\mulembe18"
+    Set-Location "c:\Users\Admin\Desktop\mulembe18"
 
     Write-Host "Checking Git repository..." -ForegroundColor Cyan
 

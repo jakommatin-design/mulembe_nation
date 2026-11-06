@@ -1,11 +1,10 @@
-```powershell
 # ============================================
 # MULEMBE18 - AUTOMATED GITHUB PUSH SCRIPT
 # ============================================
 
 $ErrorActionPreference = "Stop"
 
-$RepoUrl = "https://github.com/jakommatin-design/mulembe18.git"
+$RepoUrl = "https://github.com/jakommatin-design/mulembe_nation.git"
 $Branch = "main"
 
 Write-Host ""
@@ -127,4 +126,3 @@ catch {
     Write-Host ""
     Write-Host "Review the error, correct the issue, and run the script again." -ForegroundColor Yellow
 }
-```

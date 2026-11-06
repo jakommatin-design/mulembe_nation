@@ -61,7 +61,7 @@ export default function Header() {
             </a>
 
             {/* Desktop Nav */}
-            <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 text-xs xl:text-sm font-semibold text-gray-600" aria-label="Main Navigation">
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-xs xl:text-sm font-semibold text-gray-600" aria-label="Main Navigation">
               {navLinks.map(({ href, label }) => (
                 <a
                   key={href}
@@ -122,7 +122,7 @@ export default function Header() {
           </div>
 
           {/* Mobile Dropdown */}
-          <div className={`lg:hidden overflow-hidden transition-all duration-300 ${menuOpen ? "max-h-[600px]" : "max-h-0"}`}>
+          <div className={`lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${menuOpen ? "max-h-[600px] opacity-100 visible" : "max-h-0 opacity-0 invisible"}`}>
             <nav className="border-t border-gray-200 pb-4 pt-3 flex flex-col gap-1 bg-white" aria-label="Mobile Navigation">
               {navLinks.map(({ href, label }) => (
                 <a

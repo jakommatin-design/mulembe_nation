@@ -38,7 +38,7 @@ export default function HeroSection() {
       >
         {/* Upper diagonal banner */}
         <div
-          className="text-[#DDA71D] opacity-[0.35] font-black whitespace-nowrap text-[10vw] sm:text-[12vw] tracking-wider leading-none select-none"
+          className="text-[#DDA71D] opacity-[0.35] font-black whitespace-nowrap text-[7vw] sm:text-[9vw] tracking-wider leading-none select-none"
           style={{ fontFamily: "var(--font-caveat), var(--font-kalam), cursive" }}
         >
           Mulembe Ni Nguvu • Unity is Strength
@@ -46,7 +46,7 @@ export default function HeroSection() {
 
         {/* Center massive diagonal watermark */}
         <div
-          className="text-[#0D6E38] opacity-[0.25] font-black uppercase whitespace-nowrap text-[12vw] sm:text-[14vw] tracking-[0.25em] leading-none my-1 select-none"
+          className="text-[#0D6E38] opacity-[0.25] font-black uppercase whitespace-nowrap text-[9vw] sm:text-[11vw] tracking-[0.25em] leading-none my-1 select-none"
           style={{ fontFamily: "var(--font-outfit), sans-serif" }}
         >
           Mulembe 18
@@ -54,7 +54,7 @@ export default function HeroSection() {
 
         {/* Lower diagonal banner */}
         <div
-          className="text-[#DDA71D] opacity-[0.30] font-black whitespace-nowrap text-[9vw] sm:text-[11vw] tracking-widest leading-none select-none"
+          className="text-[#DDA71D] opacity-[0.30] font-black whitespace-nowrap text-[6vw] sm:text-[8vw] tracking-widest leading-none select-none"
           style={{ fontFamily: "var(--font-caveat), var(--font-kalam), cursive" }}
         >
           Unity Is Strength • Mulembe Ni Nguvu
@@ -66,11 +66,8 @@ export default function HeroSection() {
           ============================================================== */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-[2]">
         <img
-          src="https://aipate.com/wp-content/uploads/2017/10/isukuti1.jpg"
-          onError={(e) => {
-            e.currentTarget.src = "/images/isukuti.jpg";
-          }}
-          alt="Luhya Isukuti Traditional Cultural Drums & Dance"
+          src="/images/isukuti.jpg"
+          alt="Luhya Isukuti Traditional Cultural Drums &amp; Dance"
           className="w-full h-full object-cover scale-105 filter blur-[3px] sm:blur-[4px] opacity-80 brightness-[1.03] contrast-[1.05]"
         />
         {/* Gentle translucent tint: keeps the photo clearly visible while giving headline text maximum contrast */}
@@ -119,8 +116,10 @@ export default function HeroSection() {
               <span className="text-[#0D6E38]">Stronger Together!</span>
               {/* Odoo Hand-drawn Cyan / Blue Marker Doodle Underline */}
               <svg
-                className="absolute -bottom-2 sm:-bottom-4 left-0 w-full overflow-visible pointer-events-none"
+                className="absolute -bottom-2 sm:-bottom-3 left-0 w-full pointer-events-none"
+                style={{ height: "14px", width: "100%", maxHeight: "14px" }}
                 viewBox="0 0 240 18"
+                preserveAspectRatio="none"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >

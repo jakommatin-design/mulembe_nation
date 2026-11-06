@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+:root {
+  --font-jakarta: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-outfit: "Outfit", system-ui, -apple-system, sans-serif;
+  --font-caveat: "Caveat", cursive, sans-serif;
+  --font-kalam: "Kalam", cursive, sans-serif;
+}
+
 /* ============================================================
    MULEMBE COASTAL PULSE — DESIGN SYSTEM
    ============================================================ */

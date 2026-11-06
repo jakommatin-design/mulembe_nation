@@ -164,8 +164,10 @@ export default function AboutSection() {
             <span className="relative inline-block">
               <span>Shared Roots</span>
               <svg
-                className="absolute -bottom-2 left-0 w-full overflow-visible pointer-events-none"
+                className="absolute -bottom-2 left-0 w-full pointer-events-none"
+                style={{ height: "10px", width: "100%", maxHeight: "10px" }}
                 viewBox="0 0 160 12"
+                preserveAspectRatio="none"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
