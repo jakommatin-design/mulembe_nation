@@ -13,9 +13,10 @@ import {
 import { BorderBeam } from "@/components/magicui/border-beam";
 import NumberTicker from "@/components/magicui/number-ticker";
 import { normalizeImageUrl } from "@/lib/image-utils";
+import { KENYA_LOCATIONS, getSubcounties, getWards } from "@/lib/locations";
 
 type DashboardRole = "member" | "admin";
-type MemberTab = "overview" | "contributions" | "events" | "welfare-claim" | "clan-desk";
+type MemberTab = "overview" | "my-leadership" | "contributions" | "events" | "welfare-claim" | "clan-desk";
 type AdminTab = "analytics" | "events" | "claims" | "members" | "solidarity" | "broadcast" | "gallery" | "leadership";
 
 /* ─── Reusable Atoms ─────────────────────────────────────────── */
@@ -109,13 +110,46 @@ export default function DashboardPage() {
   const [payPhone, setPayPhone] = useState("");
   const [payStatus, setPayStatus] = useState<"idle" | "sending" | "success">("idle");
 
-  // Subcounty Admin Role Management
+  // Leadership & Area states
+  const [hierarchyData, setHierarchyData] = useState<any | null>(null);
+  const [loadingHierarchy, setLoadingHierarchy] = useState(false);
+  const [wardAreasList, setWardAreasList] = useState<any[]>([]);
+  const [selectedAreaId, setSelectedAreaId] = useState<string>("");
+  const [savingArea, setSavingArea] = useState(false);
+  const [areaChangeSuccess, setAreaChangeSuccess] = useState(false);
+
+  // Role Management
   const [roleModalMember, setRoleModalMember] = useState<any | null>(null);
   const [assignedRole, setAssignedRole] = useState<string>("member");
   const [assignedZone, setAssignedZone] = useState<string>("Nyali");
+  const [assignedWard, setAssignedWard] = useState<string>("");
+  const [assignedAreaId, setAssignedAreaId] = useState<string>("");
   const [assigningRole, setAssigningRole] = useState(false);
 
   // Fetchers
+  const fetchHierarchy = async () => {
+    setLoadingHierarchy(true);
+    try {
+      const r = await fetch("/api/leadership/hierarchy");
+      const d = await r.json();
+      if (d.success) setHierarchyData(d.hierarchy);
+    } catch (e) {
+      console.error("Failed to fetch leadership hierarchy:", e);
+    } finally {
+      setLoadingHierarchy(false);
+    }
+  };
+
+  const fetchWardAreas = async (targetWard?: string) => {
+    if (!targetWard) return;
+    try {
+      const r = await fetch(`/api/areas?ward=${encodeURIComponent(targetWard)}&activeOnly=true`);
+      const d = await r.json();
+      if (d.success) setWardAreasList(d.areas || []);
+    } catch (e) {
+      console.error("Failed to fetch areas:", e);
+    }
+  };
   const fetchAllEvents = async () => { setLoadingEvents(true); try { const r = await fetch("/api/events"); const d = await r.json(); if (d.success) setEventsList(d.events || []); } catch {} finally { setLoadingEvents(false); } };
   const fetchAllNews = async () => { setLoadingNews(true); try { const r = await fetch("/api/news"); const d = await r.json(); if (d.success) setNewsList(d.articles || []); } catch {} finally { setLoadingNews(false); } };
   const fetchAllGallery = async () => { setLoadingGallery(true); try { const r = await fetch("/api/gallery"); const d = await r.json(); if (d.success) setGalleryList(d.photos || []); } catch {} finally { setLoadingGallery(false); } };
@@ -188,6 +222,8 @@ export default function DashboardPage() {
           targetMemberId: roleModalMember.id,
           newRole: assignedRole,
           subcountyZone: assignedRole === "subcounty_admin" ? assignedZone : undefined,
+          ward: assignedRole === "ward_leader" ? assignedWard : undefined,
+          areaId: assignedRole === "area_leader" && assignedAreaId ? Number(assignedAreaId) : undefined,
         }),
       });
       const data = await res.json();
@@ -202,6 +238,32 @@ export default function DashboardPage() {
       alert("Network error.");
     } finally {
       setAssigningRole(false);
+    }
+  };
+
+  const handleUpdateMemberArea = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAreaId) return;
+    setSavingArea(true);
+    try {
+      const res = await fetch("/api/member/area", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ areaId: selectedAreaId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAreaChangeSuccess(true);
+        setTimeout(() => setAreaChangeSuccess(false), 3500);
+        await fetchHierarchy();
+        await fetchAllMembers();
+      } else {
+        alert(data.message || "Failed to update area.");
+      }
+    } catch {
+      alert("Network error updating area.");
+    } finally {
+      setSavingArea(false);
     }
   };
   const handleDeleteContribution = async (id: any) => { if (!confirm("Remove record?")) return; const r = await fetch(`/api/contributions?id=${id}`, { method: "DELETE" }); const d = await r.json(); if (d.success) fetchAllContributions(); };
@@ -226,6 +288,7 @@ export default function DashboardPage() {
   // Nav
   const memberNav = [
     { id: "overview", label: "Profile & ID Card", icon: QrCode, color: "text-[#DDA71D] bg-[#DDA71D]/10" },
+    { id: "my-leadership", label: "My Leadership", icon: ShieldCheck, color: "text-amber-400 bg-amber-500/10" },
     { id: "contributions", label: "Welfare & Receipts", icon: Receipt, color: "text-emerald-400 bg-emerald-500/10" },
     { id: "events", label: "Event Passes", icon: Ticket, color: "text-blue-400 bg-blue-500/10" },
     { id: "welfare-claim", label: "Emergency Aid", icon: HeartHandshake, color: "text-rose-400 bg-rose-500/10" },
@@ -323,6 +386,42 @@ export default function DashboardPage() {
         <div className={`p-2 flex-1 overflow-y-auto space-y-0.5 ${mobileMenuOpen ? "block" : "hidden md:block"}`}>
           {!isCollapsed && <div className="text-[9px] uppercase font-bold tracking-widest text-emerald-700/80 px-2 py-1.5 flex items-center gap-1.5"><Compass size={9} />{role === "member" ? "Member Services" : "Governance Console"}</div>}
           {currentNav.map(item => <NavItem key={item.id} item={item} />)}
+
+          {/* Quick Leadership Dashboards (Role-based) */}
+          {!isCollapsed && currentMember && (currentMember.role === "ward_leader" || currentMember.role === "area_leader" || currentMember.role === "subcounty_admin") && (
+            <div className="pt-2 mt-2 border-t border-emerald-900/60 space-y-1">
+              <div className="text-[9px] uppercase font-bold tracking-widest text-amber-400/80 px-2 py-1 flex items-center gap-1">
+                <Crown size={9} /> My Leadership Consoles
+              </div>
+              {currentMember.role === "ward_leader" && (
+                <Link
+                  href="/ward-dashboard"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
+                >
+                  <Crown size={12} className="text-amber-400 flex-shrink-0" />
+                  <span className="truncate">Ward Leader Console</span>
+                </Link>
+              )}
+              {currentMember.role === "area_leader" && (
+                <Link
+                  href="/area-dashboard"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
+                >
+                  <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
+                  <span className="truncate">Area Leader Console</span>
+                </Link>
+              )}
+              {currentMember.role === "subcounty_admin" && (
+                <Link
+                  href="/subcounty-dashboard"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-400/10 hover:bg-blue-400/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold transition-all"
+                >
+                  <Building size={12} className="text-blue-400 flex-shrink-0" />
+                  <span className="truncate">Subcounty Console</span>
+                </Link>
+              )}
+            </div>
+          )}
         </div>
 
         <div className={`border-t border-emerald-900/50 bg-black/10 ${isCollapsed ? "p-2 flex flex-col items-center gap-2" : "p-2.5"}`}>
@@ -353,7 +452,7 @@ export default function DashboardPage() {
             <button type="button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-1.5 rounded-lg border border-gray-200 text-gray-500 cursor-pointer">{mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}</button>
             <div>
               <h1 className="text-sm font-bold text-[#18221B]" style={{ fontFamily: "var(--font-outfit)" }}>
-                {role === "member" ? (memberTab === "overview" ? "My Profile" : memberTab === "contributions" ? "Welfare Ledger" : memberTab === "events" ? "Event Passes" : memberTab === "welfare-claim" ? "Emergency Aid" : "Clan Desk") : (adminTab === "analytics" ? "Treasury & Inflows" : adminTab === "events" ? "Events Manager" : adminTab === "claims" ? "Claims Review" : adminTab === "members" ? "Member Registry" : adminTab === "solidarity" ? "Solidarity Fund" : adminTab === "broadcast" ? "Communiqués" : adminTab === "gallery" ? "Gallery Manager" : "Leadership")}
+                {role === "member" ? (memberTab === "overview" ? "My Profile" : memberTab === "my-leadership" ? "My Leadership Hierarchy" : memberTab === "contributions" ? "Welfare Ledger" : memberTab === "events" ? "Event Passes" : memberTab === "welfare-claim" ? "Emergency Aid" : "Clan Desk") : (adminTab === "analytics" ? "Treasury & Inflows" : adminTab === "events" ? "Events Manager" : adminTab === "claims" ? "Claims Review" : adminTab === "members" ? "Member Registry" : adminTab === "solidarity" ? "Solidarity Fund" : adminTab === "broadcast" ? "Communiqués" : adminTab === "gallery" ? "Gallery Manager" : "Leadership")}
               </h1>
               <p className="text-[10px] text-gray-400">{role === "member" ? "Member Portal" : "Admin Console"}</p>
             </div>
@@ -468,6 +567,334 @@ export default function DashboardPage() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MEMBER: MY LEADERSHIP HIERARCHY */}
+          {role === "member" && memberTab === "my-leadership" && (
+            <div className="space-y-5 animate-fade-in">
+              {/* Header Banner */}
+              <div className="bg-gradient-to-r from-[#082f1a] to-[#0D6E38] rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+                <BorderBeam size={160} duration={14} colorFrom="#DDA71D" colorTo="#0077B6" />
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#DDA71D]/20 text-[#DDA71D] text-[10px] font-bold">
+                      <ShieldCheck size={12} /> Grassroots Governance
+                    </div>
+                    <h3 className="text-lg font-black text-white" style={{ fontFamily: "var(--font-outfit)" }}>
+                      My Leadership Hierarchy
+                    </h3>
+                    <p className="text-xs text-emerald-200/80 max-w-xl leading-relaxed">
+                      Your four-tier community representation across Mombasa County: Area, Ward, Subcounty, and County Executive.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchHierarchy}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold self-start md:self-center transition-colors cursor-pointer"
+                  >
+                    <RefreshCw size={12} className={loadingHierarchy ? "animate-spin" : ""} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Area Selection / Prompt Banner if no area selected */}
+              {(!currentMember?.area_id || !hierarchyData?.area?.hasArea) && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                      <AlertTriangle size={20} />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <h4 className="text-sm font-bold text-amber-900">
+                        Choose Your Local Area
+                      </h4>
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        You have not selected your residential area within <strong>{currentMember?.ward || "your ward"}</strong>.
+                        Choosing your area connects you directly to your neighborhood Area Leader for immediate welfare assistance, baraza meeting alerts, and local representation.
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleUpdateMemberArea} className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-lg">
+                    {wardAreasList.length > 0 ? (
+                      <>
+                        <select
+                          value={selectedAreaId}
+                          onChange={(e) => setSelectedAreaId(e.target.value)}
+                          className={inputCls + " flex-1"}
+                          required
+                        >
+                          <option value="">-- Select an area in {currentMember?.ward || "your ward"} --</option>
+                          {wardAreasList.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} {a.area_leader_name ? `(Leader: ${a.area_leader_name})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          disabled={savingArea || !selectedAreaId}
+                          className={btnPrimary + " whitespace-nowrap justify-center"}
+                        >
+                          {savingArea ? "Saving..." : "Confirm Area"}
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-xs text-amber-700 italic bg-amber-100/60 px-3 py-2 rounded-xl w-full">
+                        Areas not yet available for {currentMember?.ward || "this ward"}. Your Ward Leader will upload and publish them soon.
+                      </div>
+                    )}
+                  </form>
+                  {areaChangeSuccess && (
+                    <div className="text-xs text-emerald-700 font-bold flex items-center gap-1.5 pt-1">
+                      <CheckCircle2 size={13} /> Area updated successfully!
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* If member already has an area, offer a clean switcher */}
+              {currentMember?.area_id && hierarchyData?.area?.hasArea && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#0D6E38] flex items-center justify-center flex-shrink-0">
+                      <MapPin size={16} />
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Assigned Area:</span>{" "}
+                      <span className="font-bold text-gray-900">{currentMember.area_name || hierarchyData.area.name}</span>
+                      <span className="text-gray-400"> ({currentMember.ward || hierarchyData.ward.name})</span>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleUpdateMemberArea} className="flex items-center gap-2">
+                    <select
+                      value={selectedAreaId}
+                      onChange={(e) => setSelectedAreaId(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
+                    >
+                      <option value="">Switch Area</option>
+                      {wardAreasList.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={savingArea || !selectedAreaId || selectedAreaId === String(currentMember.area_id)}
+                      className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-[#0D6E38] hover:text-white text-gray-700 text-xs font-semibold transition-colors disabled:opacity-40 cursor-pointer"
+                    >
+                      {savingArea ? "Saving..." : "Change"}
+                    </button>
+                    {areaChangeSuccess && (
+                      <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
+                        <Check size={12} /> Updated
+                      </span>
+                    )}
+                  </form>
+                </div>
+              )}
+
+              {/* 4-Tier Leadership Cards Grid */}
+              {loadingHierarchy ? (
+                <div className="flex justify-center py-12"><Spinner /></div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* TIER 1: AREA LEADER */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 hover:border-[#0D6E38]/30 transition-all relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-[#0D6E38] border border-emerald-200/60 uppercase tracking-wide flex items-center gap-1">
+                        <MapPin size={10} /> Tier 1 · Local Area
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-400">
+                        {hierarchyData?.area?.name || "Unassigned Area"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 pt-1">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#0D6E38] to-[#082f1a] text-[#DDA71D] font-black text-base flex items-center justify-center border-2 border-[#DDA71D]/40 flex-shrink-0 shadow-sm">
+                        {hierarchyData?.area?.isVacant ? "?" : hierarchyData?.area?.leader?.name?.slice(0, 2).toUpperCase() || "AL"}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-gray-900 truncate">
+                          {hierarchyData?.area?.leader?.name || "Position Vacant / To be appointed"}
+                        </h4>
+                        <div className="text-xs font-semibold text-[#0D6E38]">
+                          {hierarchyData?.area?.leader?.role || "Area Leader"}
+                        </div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          {hierarchyData?.area?.hasArea ? `Area: ${hierarchyData.area.name}` : "Please choose your area to view leader"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {hierarchyData?.area?.isVacant ? (
+                      <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 text-[11px] text-gray-500 italic">
+                        {hierarchyData?.area?.hasArea
+                          ? "No Area Leader has been appointed yet for this area. Your Ward Leader will assign one."
+                          : "Select an area above to view your local Area Leader."}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100 space-y-1.5 text-xs">
+                        {hierarchyData?.area?.leader?.phone && hierarchyData?.area?.leader?.phone !== "—" && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500 text-[11px]">Direct Phone:</span>
+                            <a href={`tel:${hierarchyData.area.leader.phone}`} className="font-semibold text-[#0D6E38] hover:underline flex items-center gap-1">
+                              <Phone size={11} /> {hierarchyData.area.leader.phone}
+                            </a>
+                          </div>
+                        )}
+                        {hierarchyData?.area?.leader?.email && hierarchyData?.area?.leader?.email !== "—" && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500 text-[11px]">Email:</span>
+                            <a href={`mailto:${hierarchyData.area.leader.email}`} className="font-semibold text-[#0D6E38] hover:underline flex items-center gap-1 truncate max-w-[180px]">
+                              <Mail size={11} /> {hierarchyData.area.leader.email}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* TIER 2: WARD LEADER */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 hover:border-[#DDA71D]/40 transition-all relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 uppercase tracking-wide flex items-center gap-1">
+                        <Crown size={10} className="text-[#DDA71D]" /> Tier 2 · Ward Level
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-400">
+                        {hierarchyData?.ward?.name || `${currentMember?.ward || "Ward"} Ward`}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 pt-1">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DDA71D] to-[#b3830c] text-white font-black text-base flex items-center justify-center border-2 border-amber-300 flex-shrink-0 shadow-sm">
+                        {hierarchyData?.ward?.isVacant ? "?" : hierarchyData?.ward?.leader?.name?.slice(0, 2).toUpperCase() || "WL"}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-gray-900 truncate">
+                          {hierarchyData?.ward?.leader?.name || "Position Vacant / To be appointed"}
+                        </h4>
+                        <div className="text-xs font-semibold text-[#DDA71D]">
+                          {hierarchyData?.ward?.leader?.role || "Ward Leader"}
+                        </div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          Ward: {hierarchyData?.ward?.name || currentMember?.ward || "Not specified"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {hierarchyData?.ward?.isVacant ? (
+                      <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 text-[11px] text-gray-500 italic">
+                        Position vacant. Awaiting appointment by Subcounty Admin or Super Admin.
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-100 space-y-1.5 text-xs">
+                        {hierarchyData?.ward?.leader?.phone && hierarchyData?.ward?.leader?.phone !== "—" && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500 text-[11px]">Direct Phone:</span>
+                            <a href={`tel:${hierarchyData.ward.leader.phone}`} className="font-semibold text-amber-900 hover:underline flex items-center gap-1">
+                              <Phone size={11} /> {hierarchyData.ward.leader.phone}
+                            </a>
+                          </div>
+                        )}
+                        {hierarchyData?.ward?.leader?.email && hierarchyData?.ward?.leader?.email !== "—" && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500 text-[11px]">Email:</span>
+                            <a href={`mailto:${hierarchyData.ward.leader.email}`} className="font-semibold text-amber-900 hover:underline flex items-center gap-1 truncate max-w-[180px]">
+                              <Mail size={11} /> {hierarchyData.ward.leader.email}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* TIER 3: SUBCOUNTY ADMIN */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 hover:border-blue-300 transition-all relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60 uppercase tracking-wide flex items-center gap-1">
+                        <Building size={10} /> Tier 3 · Subcounty
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-400">
+                        {hierarchyData?.subcounty?.name || `${currentMember?.subcounty || "Subcounty"} Subcounty`}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 pt-1">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-700 to-blue-900 text-white font-black text-base flex items-center justify-center border-2 border-blue-300 flex-shrink-0 shadow-sm">
+                        {hierarchyData?.subcounty?.isVacant ? "?" : hierarchyData?.subcounty?.leader?.name?.slice(0, 2).toUpperCase() || "SA"}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-gray-900 truncate">
+                          {hierarchyData?.subcounty?.leader?.name || "Position Vacant / To be appointed"}
+                        </h4>
+                        <div className="text-xs font-semibold text-blue-700">
+                          {hierarchyData?.subcounty?.leader?.role || "Subcounty Administrator"}
+                        </div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          Jurisdiction: {hierarchyData?.subcounty?.name || currentMember?.subcounty || "Mombasa"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {hierarchyData?.subcounty?.isVacant ? (
+                      <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 text-[11px] text-gray-500 italic">
+                        Position vacant. Awaiting appointment by Executive Council.
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 space-y-1.5 text-xs">
+                        {hierarchyData?.subcounty?.leader?.phone && hierarchyData?.subcounty?.leader?.phone !== "—" && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500 text-[11px]">Direct Phone:</span>
+                            <a href={`tel:${hierarchyData.subcounty.leader.phone}`} className="font-semibold text-blue-700 hover:underline flex items-center gap-1">
+                              <Phone size={11} /> {hierarchyData.subcounty.leader.phone}
+                            </a>
+                          </div>
+                        )}
+                        {hierarchyData?.subcounty?.leader?.email && hierarchyData?.subcounty?.leader?.email !== "—" && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500 text-[11px]">Email:</span>
+                            <a href={`mailto:${hierarchyData.subcounty.leader.email}`} className="font-semibold text-blue-700 hover:underline flex items-center gap-1 truncate max-w-[180px]">
+                              <Mail size={11} /> {hierarchyData.subcounty.leader.email}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* TIER 4: COUNTY EXECUTIVE */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 hover:border-purple-300 transition-all relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/60 uppercase tracking-wide flex items-center gap-1">
+                        <Landmark size={10} /> Tier 4 · County Executive
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-400">
+                        {hierarchyData?.county?.name || "Mombasa County"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 pt-1">
+                      {(hierarchyData?.county?.leaders || []).map((leader: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-gray-900 truncate">{leader.name}</div>
+                            <div className="text-[10px] text-purple-700 font-semibold">{leader.role}</div>
+                          </div>
+                          {leader.phone && (
+                            <a href={`tel:${leader.phone}`} className="p-1.5 rounded-lg bg-white border border-gray-200 text-[#0D6E38] hover:bg-emerald-50 text-[10px] font-semibold flex items-center gap-1">
+                              <Phone size={11} /> <span className="hidden sm:inline">{leader.phone}</span>
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -800,7 +1227,11 @@ export default function DashboardPage() {
                                 onClick={() => {
                                   setRoleModalMember(m);
                                   setAssignedRole(m.role || "member");
-                                  setAssignedZone(m.subcounty_admin_zone || m.residential_zone || "Nyali");
+                                  const defaultSub = m.subcounty || m.subcounty_admin_zone || m.residential_zone || "Nyali";
+                                  setAssignedZone(defaultSub);
+                                  const wards = getWards(defaultSub);
+                                  setAssignedWard(m.ward_leader_ward || m.ward || (wards[0] || ""));
+                                  setAssignedAreaId(m.area_id ? String(m.area_id) : "");
                                 }}
                                 className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold mr-1 cursor-pointer"
                               >
@@ -1254,14 +1685,83 @@ export default function DashboardPage() {
                 <label className="block font-semibold text-gray-700 mb-1.5">Assigned System Role</label>
                 <select
                   value={assignedRole}
-                  onChange={(e) => setAssignedRole(e.target.value)}
+                  onChange={(e) => {
+                    const r = e.target.value;
+                    setAssignedRole(r);
+                    if (r === "ward_leader" && !assignedWard) {
+                      const wards = getWards(assignedZone);
+                      if (wards.length > 0) setAssignedWard(wards[0]);
+                    }
+                  }}
                   className={inputCls}
                 >
                   <option value="member">Regular Member</option>
+                  <option value="area_leader">Area Leader</option>
+                  <option value="ward_leader">Ward Leader</option>
                   <option value="subcounty_admin">Subcounty Admin</option>
                   <option value="super_admin">Super Administrator</option>
                 </select>
               </div>
+
+              {assignedRole === "ward_leader" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1.5">
+                      Subcounty <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={assignedZone}
+                      onChange={(e) => {
+                        const sub = e.target.value;
+                        setAssignedZone(sub);
+                        const wards = getWards(sub);
+                        setAssignedWard(wards[0] || "");
+                      }}
+                      className={inputCls}
+                    >
+                      {getSubcounties().map((sub) => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1.5">
+                      Ward Jurisdiction <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={assignedWard}
+                      onChange={(e) => setAssignedWard(e.target.value)}
+                      className={inputCls}
+                      required
+                    >
+                      {getWards(assignedZone).map((w) => (
+                        <option key={w} value={w}>{w} Ward</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      This leader can create and manage areas and assign area leaders within this ward.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {assignedRole === "area_leader" && (
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1.5">
+                    Area ID (numeric) or Ward Area
+                  </label>
+                  <input
+                    type="text"
+                    value={assignedAreaId}
+                    onChange={(e) => setAssignedAreaId(e.target.value)}
+                    placeholder="Area ID (e.g. 1)"
+                    className={inputCls}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Area leaders can also be assigned directly in the Ward Leader console by selecting an area.
+                  </p>
+                </div>
+              )}
 
               {assignedRole === "subcounty_admin" && (
                 <div>
@@ -1273,23 +1773,14 @@ export default function DashboardPage() {
                     onChange={(e) => setAssignedZone(e.target.value)}
                     className={inputCls}
                   >
-                    {[
-                      "Nyali",
-                      "Bamburi",
-                      "Mombasa Island (Mvita)",
-                      "Likoni Channel",
-                      "Changamwe",
-                      "Kisauni",
-                      "Mtwapa North",
-                      "Jomvu",
-                    ].map((zone) => (
+                    {getSubcounties().map((zone) => (
                       <option key={zone} value={zone}>
-                        {zone}
+                        {zone} Subcounty
                       </option>
                     ))}
                   </select>
                   <p className="text-[10px] text-gray-400 mt-1">
-                    This admin will only have access to members registered within this subcounty.
+                    This admin will have administrative access to all wards and members registered within this subcounty.
                   </p>
                 </div>
               )}

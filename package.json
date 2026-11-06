@@ -7,7 +7,14 @@
   ],
   "scripts": {
     "dev": "npm --prefix mulembe18-site run dev",
-    "build": "npm --prefix mulembe18-site install && npm --prefix mulembe18-site run build",
+    "build": "npm --prefix mulembe18-site run build",
     "start": "npm --prefix mulembe18-site run start"
+  },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.3.4",
+    "@tailwindcss/oxide-linux-x64-musl": "^4.3.4",
+    "lightningcss": "^1.33.0",
+    "lightningcss-linux-x64-gnu": "^1.33.0",
+    "lightningcss-linux-x64-musl": "^1.33.0"
   }
 }

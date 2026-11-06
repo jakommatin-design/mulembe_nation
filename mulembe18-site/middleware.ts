@@ -5,6 +5,8 @@ const isProtectedRoute = createRouteMatcher([
   "/member-directory(.*)",
   "/dashboard(.*)",
   "/subcounty-dashboard(.*)",
+  "/ward-dashboard(.*)",
+  "/area-dashboard(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

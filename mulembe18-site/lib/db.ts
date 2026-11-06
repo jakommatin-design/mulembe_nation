@@ -223,6 +223,49 @@ export async function initDatabaseSchema() {
       await db.execute("ALTER TABLE members ADD COLUMN password_hash VARCHAR(255) NULL;");
     } catch {}
 
+    // Ensure Location & Leadership hierarchy columns exist on members
+    try { await db.execute("ALTER TABLE members ADD COLUMN county VARCHAR(100) DEFAULT 'Mombasa';"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN subcounty VARCHAR(100) NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN ward VARCHAR(100) NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN area_id INT NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN area_name VARCHAR(150) NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN ward_leader_ward VARCHAR(100) NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN area_leader_area_id INT NULL;"); } catch {}
+
+    // 8. Areas Table (Created and managed by Ward Leaders)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS areas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(150) NOT NULL,
+        ward VARCHAR(100) NOT NULL,
+        subcounty VARCHAR(100) NOT NULL,
+        county VARCHAR(100) DEFAULT 'Mombasa',
+        description TEXT NULL,
+        contact_info VARCHAR(191) NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_by_ward_leader_id INT NULL,
+        area_leader_member_id INT NULL,
+        area_leader_name VARCHAR(191) NULL,
+        area_leader_phone VARCHAR(60) NULL,
+        area_leader_email VARCHAR(191) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 9. Area Change Logs Table
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS area_change_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        member_id INT NOT NULL,
+        old_area VARCHAR(150) NULL,
+        new_area VARCHAR(150) NOT NULL,
+        changed_by VARCHAR(191) NULL,
+        reason VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Seed gallery items if empty
     const [galleryCount]: any = await db.execute("SELECT COUNT(*) AS count FROM gallery_items");
     if (galleryCount?.[0]?.count === 0) {

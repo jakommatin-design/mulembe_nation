@@ -20,7 +20,10 @@ import {
   User,
   ArrowLeft,
   AlertCircle,
+  Building2,
+  Compass,
 } from "lucide-react";
+import { getCounties, getSubcounties, getWards } from "@/lib/locations";
 
 const clans = [
   "Bukusu",
@@ -43,17 +46,6 @@ const clans = [
   "Nandi-Luhya",
 ];
 
-const subcounties = [
-  "Nyali",
-  "Bamburi",
-  "Mombasa Island (Mvita)",
-  "Likoni Channel",
-  "Changamwe",
-  "Kisauni",
-  "Mtwapa North",
-  "Jomvu",
-];
-
 export default function RegisterPage() {
   const router = useRouter();
   const { isSignedIn, isLoaded, user } = useUser();
@@ -64,10 +56,73 @@ export default function RegisterPage() {
     phone: "",
     password: "",
     confirmPassword: "",
+    county: "Mombasa",
     subcounty: "Nyali",
+    ward: "Frere Town",
+    areaId: "",
+    areaName: "",
     subClan: "Bukusu",
     profession: "",
   });
+
+  const [availableAreas, setAvailableAreas] = useState<any[]>([]);
+  const [loadingAreas, setLoadingAreas] = useState(false);
+
+  // Available subcounties for selected county
+  const availableSubcounties = useMemo(() => {
+    return getSubcounties(form.county);
+  }, [form.county]);
+
+  // Available wards for selected subcounty
+  const availableWards = useMemo(() => {
+    return getWards(form.subcounty, form.county);
+  }, [form.subcounty, form.county]);
+
+  // Whenever subcounty changes, reset ward to the first ward in that subcounty
+  const handleSubcountyChange = (newSubcounty: string) => {
+    const wards = getWards(newSubcounty, form.county);
+    const newWard = wards[0] || "";
+    setForm((prev) => ({
+      ...prev,
+      subcounty: newSubcounty,
+      ward: newWard,
+      areaId: "",
+      areaName: "",
+    }));
+  };
+
+  // Whenever ward changes, fetch uploaded areas in that ward
+  useEffect(() => {
+    if (!form.ward) {
+      setAvailableAreas([]);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingAreas(true);
+
+    fetch(`/api/areas?ward=${encodeURIComponent(form.ward)}&activeOnly=true`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted) {
+          if (data.success && Array.isArray(data.areas)) {
+            setAvailableAreas(data.areas);
+          } else {
+            setAvailableAreas([]);
+          }
+        }
+      })
+      .catch(() => {
+        if (isMounted) setAvailableAreas([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingAreas(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [form.ward]);
 
   // Prefill when Clerk user is already authenticated
   useEffect(() => {
@@ -88,7 +143,10 @@ export default function RegisterPage() {
   const [registrationSuccess, setRegistrationSuccess] = useState<null | {
     membershipNo: string;
     fullName: string;
+    county: string;
     subcounty: string;
+    ward: string;
+    areaName: string;
     subClan: string;
   }>(null);
 
@@ -113,7 +171,7 @@ export default function RegisterPage() {
     const newErrors: Record<string, string> = {};
 
     if (!form.fullName.trim() || form.fullName.trim().length < 2) {
-      newErrors.fullName = "Please provide your full name (at least 2 characters).";
+      newErrors.fullName = "Please provide your full legal name (at least 2 characters).";
     }
 
     if (!form.email && !form.phone) {
@@ -149,11 +207,15 @@ export default function RegisterPage() {
     }
 
     if (!form.subcounty) {
-      newErrors.subcounty = "Please select your subcounty / residential zone.";
+      newErrors.subcounty = "Please select your subcounty.";
+    }
+
+    if (!form.ward) {
+      newErrors.ward = "Please select your ward.";
     }
 
     if (!form.subClan) {
-      newErrors.subClan = "Please select your ancestral Luhya sub-community.";
+      newErrors.subClan = "Please select your ancestral Luhya sub-community / clan.";
     }
 
     setErrors(newErrors);
@@ -168,6 +230,8 @@ export default function RegisterPage() {
     setErrors({});
 
     try {
+      const selectedAreaObj = availableAreas.find((a) => String(a.id) === String(form.areaId));
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,7 +241,12 @@ export default function RegisterPage() {
           phone: form.phone,
           password: form.password,
           confirmPassword: form.confirmPassword,
+          county: form.county,
+          subcounty: form.subcounty,
           residentialZone: form.subcounty,
+          ward: form.ward,
+          areaId: form.areaId ? Number(form.areaId) : null,
+          areaName: selectedAreaObj ? selectedAreaObj.name : (form.areaName || null),
           subClan: form.subClan,
           profession: form.profession || "Community Member",
           clerkId: user?.id || undefined,
@@ -198,7 +267,10 @@ export default function RegisterPage() {
       setRegistrationSuccess({
         membershipNo: data.membershipNo,
         fullName: form.fullName,
+        county: form.county,
         subcounty: form.subcounty,
+        ward: form.ward,
+        areaName: selectedAreaObj ? selectedAreaObj.name : "Unassigned (Select later)",
         subClan: form.subClan,
       });
     } catch (err: any) {
@@ -227,11 +299,11 @@ export default function RegisterPage() {
               Mulembe, {registrationSuccess.fullName}!
             </h2>
             <p className="text-xs sm:text-sm text-gray-500">
-              Your account has been created in Clerk and indexed into the Mulembe18 Coastal Chapter.
+              Your member profile has been registered and placed into the {registrationSuccess.ward} Ward community registry.
             </p>
           </div>
 
-          {/* Membership Badge Card */}
+          {/* Membership Badge Card with Hierarchy */}
           <div className="bg-gradient-to-br from-[#0D6E38] to-[#084523] text-white rounded-2xl p-5 shadow-lg space-y-4">
             <div className="flex items-center justify-between border-b border-emerald-600/60 pb-3">
               <div>
@@ -240,14 +312,23 @@ export default function RegisterPage() {
               </div>
               <ShieldCheck size={32} className="text-[#DDA71D]" />
             </div>
+
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] text-emerald-200 block">Subcounty Chapter</span>
-                <span className="font-bold text-white">{registrationSuccess.subcounty}</span>
-              </div>
               <div>
                 <span className="text-[10px] text-emerald-200 block">Sub-Clan</span>
                 <span className="font-bold text-white">{registrationSuccess.subClan}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-200 block">Subcounty</span>
+                <span className="font-bold text-white">{registrationSuccess.subcounty}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-200 block">Ward Jurisdiction</span>
+                <span className="font-bold text-white">{registrationSuccess.ward}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-200 block">Designated Area</span>
+                <span className="font-bold text-emerald-100">{registrationSuccess.areaName}</span>
               </div>
             </div>
           </div>
@@ -308,15 +389,13 @@ export default function RegisterPage() {
                   Join Mulembe18 Coastal Chapter
                 </h1>
                 <p className="text-xs sm:text-sm text-emerald-100/90">
-                  {isSignedIn
-                    ? "Complete your community profile and subcounty affiliation."
-                    : "Register your membership across the 18 Luhya sub-communities in Mombasa."}
+                  Register your clan affiliation and residential location (Subcounty &gt; Ward &gt; Area).
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Form Body - Mandatory Community & Clan Affiliation */}
+          {/* Form Body - Mandatory Community & Location Affiliation */}
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5" noValidate>
             {errors.form && (
               <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-700">
@@ -401,31 +480,137 @@ export default function RegisterPage() {
             </div>
             {errors.contact && <p className="text-[11px] text-rose-600 font-medium">{errors.contact}</p>}
 
-            {/* Subcounty & Sub-Clan Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Subcounty / Coastal Zone <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                    <MapPin size={16} />
-                  </div>
-                  <select
-                    value={form.subcounty}
-                    onChange={(e) => setForm({ ...form, subcounty: e.target.value })}
-                    className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-gray-200 text-xs sm:text-sm bg-gray-50/50 focus:bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden"
-                  >
-                    {subcounties.map((sc) => (
-                      <option key={sc} value={sc}>
-                        {sc}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {errors.subcounty && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.subcounty}</p>}
+            {/* LOCATION HIERARCHY: County > Subcounty > Ward > Area */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gray-50/80 border border-gray-200/90 space-y-4">
+              <div className="flex items-center gap-2 pb-1 border-b border-gray-200/60">
+                <Compass size={16} className="text-[#0D6E38]" />
+                <h3 className="text-xs font-extrabold uppercase tracking-wide text-gray-700">
+                  Residential Location Hierarchy
+                </h3>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* County */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                    County <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <Building2 size={15} />
+                    </div>
+                    <select
+                      value={form.county}
+                      onChange={(e) => setForm({ ...form, county: e.target.value })}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
+                    >
+                      {getCounties().map((c) => (
+                        <option key={c} value={c}>
+                          {c} County
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Subcounty */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                    Subcounty <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <MapPin size={15} />
+                    </div>
+                    <select
+                      value={form.subcounty}
+                      onChange={(e) => handleSubcountyChange(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
+                    >
+                      {availableSubcounties.map((sc) => (
+                        <option key={sc} value={sc}>
+                          {sc} Subcounty
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {errors.subcounty && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.subcounty}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Ward */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                    Ward <span className="text-rose-500">* (Dependent on Subcounty)</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <Compass size={15} />
+                    </div>
+                    <select
+                      value={form.ward}
+                      onChange={(e) => setForm({ ...form, ward: e.target.value, areaId: "", areaName: "" })}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
+                    >
+                      {availableWards.map((w) => (
+                        <option key={w} value={w}>
+                          {w} Ward
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {errors.ward && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.ward}</p>}
+                </div>
+
+                {/* Area (Dynamic / Optional) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-gray-600">
+                      Local Area / Estate <span className="text-gray-400 font-normal">(Optional)</span>
+                    </label>
+                    {loadingAreas && <span className="text-[10px] text-emerald-600 animate-pulse font-medium">Checking areas...</span>}
+                  </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <MapPin size={15} />
+                    </div>
+                    <select
+                      value={form.areaId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        const match = availableAreas.find((a) => String(a.id) === selectedId);
+                        setForm({
+                          ...form,
+                          areaId: selectedId,
+                          areaName: match ? match.name : "",
+                        });
+                      }}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden"
+                    >
+                      {availableAreas.length === 0 ? (
+                        <option value="">Areas not yet available (register anyway)</option>
+                      ) : (
+                        <>
+                          <option value="">Select your area (or choose later)</option>
+                          {availableAreas.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Areas are designated by Ward Leaders. You can select or update your area anytime from your Member Dashboard.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-Clan & Profession */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   Luhya Sub-Community / Clan <span className="text-rose-500">*</span>
@@ -437,7 +622,7 @@ export default function RegisterPage() {
                   <select
                     value={form.subClan}
                     onChange={(e) => setForm({ ...form, subClan: e.target.value })}
-                    className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-gray-200 text-xs sm:text-sm bg-gray-50/50 focus:bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden"
+                    className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-gray-200 text-xs sm:text-sm bg-gray-50/50 focus:bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
                   >
                     {clans.map((c) => (
                       <option key={c} value={c}>
@@ -448,24 +633,23 @@ export default function RegisterPage() {
                 </div>
                 {errors.subClan && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.subClan}</p>}
               </div>
-            </div>
 
-            {/* Profession / Occupation */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                Profession / Occupation <span className="text-gray-400 font-normal">(Optional)</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <Briefcase size={16} />
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Profession / Occupation <span className="text-gray-400 font-normal">(Optional)</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                    <Briefcase size={16} />
+                  </div>
+                  <input
+                    type="text"
+                    value={form.profession}
+                    onChange={(e) => setForm({ ...form, profession: e.target.value })}
+                    placeholder="e.g. Electrical Engineer, Teacher, Business"
+                    className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-gray-200 text-xs sm:text-sm bg-gray-50/50 focus:bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden"
+                  />
                 </div>
-                <input
-                  type="text"
-                  value={form.profession}
-                  onChange={(e) => setForm({ ...form, profession: e.target.value })}
-                  placeholder="e.g. Electrical Engineer, Maritime Officer, Teacher, Business"
-                  className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-gray-200 text-xs sm:text-sm bg-gray-50/50 focus:bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden"
-                />
               </div>
             </div>
 

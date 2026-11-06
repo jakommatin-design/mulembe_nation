@@ -47,9 +47,16 @@ export async function POST(req: Request) {
       confirmPassword,
       subClan,
       residentialZone,
+      county,
+      subcounty,
+      ward,
+      areaId,
+      areaName,
       profession,
       clerkId: providedClerkId,
     } = body;
+
+    const resolvedSubcounty = subcounty || residentialZone;
 
     // ── 1. Validation ─────────────────────────────────────────────
     const errors: Record<string, string> = {};
@@ -62,8 +69,9 @@ export async function POST(req: Request) {
       errors.email = "Please enter a valid email address.";
     if (phone && !validatePhone(phone))
       errors.phone = "Please enter a valid Kenyan phone number (e.g. 0712 345678).";
-    if (!subClan) errors.subClan = "Please select your sub-clan / subcounty.";
-    if (!residentialZone) errors.residentialZone = "Please select your residential zone.";
+    if (!subClan) errors.subClan = "Please select your ancestral Luhya sub-community / clan.";
+    if (!resolvedSubcounty) errors.subcounty = "Please select your subcounty.";
+    if (!ward) errors.ward = "Please select your ward (required dependent on subcounty).";
 
     // Password validation if not already authenticated via Clerk
     if (!providedClerkId) {
@@ -192,6 +200,11 @@ export async function POST(req: Request) {
                phone = COALESCE(?, phone),
                sub_clan = ?,
                residential_zone = ?,
+               county = ?,
+               subcounty = ?,
+               ward = ?,
+               area_id = ?,
+               area_name = ?,
                profession = ?
            WHERE id = ?`,
           [
@@ -199,7 +212,12 @@ export async function POST(req: Request) {
             fullName.trim(),
             normalPhone,
             subClan,
-            residentialZone,
+            resolvedSubcounty,
+            county || "Mombasa",
+            resolvedSubcounty,
+            ward,
+            areaId ? Number(areaId) : null,
+            areaName || null,
             profession || "Community Member",
             existing[0].id,
           ]
@@ -215,16 +233,22 @@ export async function POST(req: Request) {
 
     await query(
       `INSERT INTO members
-         (clerk_id, full_name, email, phone, sub_clan, residential_zone, profession,
+         (clerk_id, full_name, email, phone, sub_clan, residential_zone,
+          county, subcounty, ward, area_id, area_name, profession,
           membership_no, password_hash, role, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'member', 'Verified')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'member', 'Verified')`,
       [
         finalClerkId,
         fullName.trim(),
         normalEmail,
         normalPhone,
         subClan,
-        residentialZone,
+        resolvedSubcounty,
+        county || "Mombasa",
+        resolvedSubcounty,
+        ward,
+        areaId ? Number(areaId) : null,
+        areaName || null,
         profession || "Community Member",
         membershipNo,
         passwordHash,
