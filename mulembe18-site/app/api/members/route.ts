@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { query, initDatabaseSchema } from "@/lib/db";
 
 export async function GET(req: Request) {
@@ -22,14 +22,42 @@ export async function GET(req: Request) {
     let callerMember: any = null;
 
     if (userId) {
-      const callerRows = await query<any>(
+      let callerRows = await query<any>(
         "SELECT id, full_name, email, role, subcounty_admin_zone FROM members WHERE clerk_id = ? LIMIT 1",
         [userId]
       );
+
+      // If not linked yet, check via Clerk email
+      if (callerRows.length === 0) {
+        const clerkUser = await currentUser();
+        const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress;
+        if (userEmail) {
+          callerRows = await query<any>(
+            "SELECT id, full_name, email, role, subcounty_admin_zone FROM members WHERE email = ? LIMIT 1",
+            [userEmail.toLowerCase().trim()]
+          );
+          if (callerRows.length > 0) {
+            await query("UPDATE members SET clerk_id = ? WHERE id = ?", [userId, callerRows[0].id]);
+          }
+        }
+      }
+
+      // Check if DB has any super admins
+      const adminCountRows = await query<any>("SELECT COUNT(*) AS count FROM members WHERE role = 'super_admin'");
+      const superAdminCount = Number(adminCountRows[0]?.count || 0);
+
       if (callerRows.length > 0) {
         callerRole = callerRows[0].role || "member";
         callerSubcountyZone = callerRows[0].subcounty_admin_zone || null;
         callerMember = callerRows[0];
+      }
+
+      // Bootstrap initial super admin if none exists
+      if (superAdminCount === 0) {
+        callerRole = "super_admin";
+        if (callerRows.length > 0) {
+          await query("UPDATE members SET role = 'super_admin' WHERE id = ?", [callerRows[0].id]);
+        }
       }
     }
 

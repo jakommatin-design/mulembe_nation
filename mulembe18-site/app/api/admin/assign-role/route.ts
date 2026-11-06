@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { query, initDatabaseSchema } from "@/lib/db";
 
 /* ── POST /api/admin/assign-role ─────────────────────────────────── */
@@ -18,12 +18,50 @@ export async function POST(req: Request) {
 
     await initDatabaseSchema();
 
-    // 2. Verify caller is super_admin
-    const callerRows = await query<any>(
-      "SELECT role FROM members WHERE clerk_id = ? LIMIT 1",
+    // Check if any super admin exists in DB
+    const adminCountRows = await query<any>("SELECT COUNT(*) AS count FROM members WHERE role = 'super_admin'");
+    const superAdminCount = Number(adminCountRows[0]?.count || 0);
+
+    // 2. Resolve caller
+    let callerRows = await query<any>(
+      "SELECT id, full_name, email, role FROM members WHERE clerk_id = ? LIMIT 1",
       [userId]
     );
-    const callerRole = callerRows[0]?.role ?? "member";
+
+    // If not found by clerk_id, try linking via email from Clerk
+    if (callerRows.length === 0) {
+      const clerkUser = await currentUser();
+      const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress;
+      if (userEmail) {
+        callerRows = await query<any>(
+          "SELECT id, full_name, email, role FROM members WHERE email = ? LIMIT 1",
+          [userEmail.toLowerCase().trim()]
+        );
+        if (callerRows.length > 0) {
+          await query("UPDATE members SET clerk_id = ? WHERE id = ?", [userId, callerRows[0].id]);
+        }
+      }
+    }
+
+    let callerRole = callerRows[0]?.role ?? "member";
+
+    // Bootstrap: If no super_admin exists yet, grant super_admin to this caller!
+    if (superAdminCount === 0) {
+      callerRole = "super_admin";
+      if (callerRows.length > 0) {
+        await query("UPDATE members SET role = 'super_admin' WHERE id = ?", [callerRows[0].id]);
+      } else {
+        const clerkUser = await currentUser();
+        const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress || "admin@mulembe18.org";
+        const fullName = `${clerkUser?.firstName || "System"} ${clerkUser?.lastName || "Admin"}`.trim();
+        await query(
+          `INSERT INTO members (clerk_id, full_name, email, phone, sub_clan, residential_zone, profession, membership_no, role, status)
+           VALUES (?, ?, ?, '0700000000', 'Bukusu', 'Mombasa', 'Super Administrator', 'M18-ADMIN-01', 'super_admin', 'Verified')`,
+          [userId, fullName, userEmail]
+        );
+      }
+    }
+
     if (callerRole !== "super_admin") {
       return NextResponse.json(
         { success: false, message: "Forbidden: only super_admins can assign roles." },
