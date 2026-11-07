@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import {
   ArrowRight,
   Users,
@@ -13,47 +12,9 @@ import {
   Music,
   Flame,
   CheckCircle2,
-  X,
-  CreditCard,
-  QrCode,
-  Shield,
-  Phone,
-  Mail,
-  User,
 } from "lucide-react";
+import Link from "next/link";
 import { BorderBeam } from "@/components/magicui/border-beam";
-
-const luhyaClans = [
-  "Bukusu",
-  "Maragoli (AvaLogoli)",
-  "Wanga",
-  "Banyore (Abanyole)",
-  "Idakho",
-  "Isukha",
-  "Samia",
-  "Tachoni",
-  "Kabras",
-  "Tiriki",
-  "Kisa",
-  "Marama",
-  "Tsotso",
-  "Khayo",
-  "Marachi",
-  "Abanyala",
-  "Batsotso",
-  "Batura",
-];
-
-const coastalZones = [
-  "Nyali",
-  "Bamburi",
-  "Mombasa Island",
-  "Likoni Channel",
-  "Changamwe",
-  "Kisauni",
-  "Mtwapa North",
-  "Jomvu",
-];
 
 const corePillars = [
   {
@@ -87,64 +48,6 @@ const corePillars = [
 ];
 
 export default function AboutSection() {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [registeredMemberId, setRegisteredMemberId] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  const [form, setForm] = useState({
-    fullName: "",
-    phone: "",
-    email: "",
-    subClan: "Bukusu",
-    residentialZone: "Nyali",
-    profession: "",
-    bio: "",
-  });
-
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage("");
-
-    try {
-      const res = await fetch("/api/members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setRegisteredMemberId(data.membershipNo || "M18-2025");
-        setSubmitSuccess(true);
-      } else {
-        setErrorMessage(data.message || "Registration failed. Please check details.");
-      }
-    } catch (err: any) {
-      setErrorMessage("Network error: " + (err?.message || "Please try again."));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const resetForm = () => {
-    setSubmitSuccess(false);
-    setRegisteredMemberId("");
-    setErrorMessage("");
-    setForm({
-      fullName: "",
-      phone: "",
-      email: "",
-      subClan: "Bukusu",
-      residentialZone: "Nyali",
-      profession: "",
-      bio: "",
-    });
-    setModalOpen(false);
-  };
-
   return (
     <section id="about" className="py-20 lg:py-28 bg-[#FBF8F2] relative overflow-hidden" aria-labelledby="about-heading">
       {/* Background ambient accents */}
@@ -382,254 +285,20 @@ export default function AboutSection() {
             </div>
 
             <div className="lg:col-span-4 flex flex-col items-center lg:items-end justify-center">
-              <button
-                onClick={() => setModalOpen(true)}
+              <Link
+                href="/register"
                 className="w-full sm:w-auto px-7 py-3 sm:px-8 sm:py-3.5 rounded-full bg-[#DDA71D] hover:bg-[#F5C842] text-[#082f1a] font-extrabold text-xs sm:text-sm shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-0.5 inline-flex items-center justify-center gap-2 group whitespace-nowrap"
                 style={{ fontFamily: "var(--font-outfit)" }}
               >
                 <span>Register as Member</span>
                 <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
-              </button>
+              </Link>
             </div>
           </div>
         </div>
 
       </div>
 
-      {/* ==============================================================
-          NEW MEMBER REGISTRATION MODAL FORM
-          ============================================================== */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="glass-card bg-white max-w-xl w-full rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/60 relative my-8 max-h-[90vh] overflow-y-auto">
-            {/* Modal Close Button */}
-            <button
-              onClick={resetForm}
-              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
-              aria-label="Close registration form"
-            >
-              <X size={16} />
-            </button>
-
-            {submitSuccess ? (
-              /* Success / Membership ID Card Preview */
-              <div className="text-center py-6 space-y-6">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto text-[#0D6E38] shadow-sm">
-                  <CheckCircle2 size={36} />
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-[#0D6E38] uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                    Registration Approved
-                  </span>
-                  <h3 className="text-2xl font-black text-[#18221B]" style={{ fontFamily: "var(--font-outfit)" }}>
-                    Welcome to Mulembe18!
-                  </h3>
-                  <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
-                    Your membership details have been entered into the official Mombasa Chapter Registry and verified under your clan desk.
-                  </p>
-                </div>
-
-                {/* Digital Card Preview */}
-                <div className="glass-card-dark rounded-2xl p-6 text-white text-left relative overflow-hidden border border-white/20 shadow-xl space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-black text-white" style={{ fontFamily: "var(--font-outfit)" }}>
-                        mulembe<span className="text-[#DDA71D]">18</span>
-                      </span>
-                      <span className="text-[9px] uppercase tracking-widest text-emerald-300 block">
-                        Digital Membership Pass
-                      </span>
-                    </div>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00A859] text-white">
-                      Verified Active
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-emerald-300/80 uppercase">Member Name</span>
-                      <div className="font-bold text-white text-sm truncate">{form.fullName}</div>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-emerald-300/80 uppercase">Sub-Community</span>
-                      <div className="font-bold text-[#DDA71D] truncate">{form.subClan}</div>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-emerald-300/80 uppercase">Member Number</span>
-                      <div className="font-mono font-bold text-emerald-200">{registeredMemberId}</div>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-emerald-300/80 uppercase">Zone / Branch</span>
-                      <div className="font-semibold text-white">{form.residentialZone}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  <a
-                    href="/dashboard"
-                    className="px-6 py-2.5 rounded-full bg-[#0D6E38] hover:bg-[#0a4d29] text-white text-xs font-bold shadow-md transition-colors"
-                  >
-                    Go to Member Hub
-                  </a>
-                  <button
-                    onClick={resetForm}
-                    className="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* The Registration Form */
-              <form onSubmit={handleRegisterSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <div className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0D6E38] uppercase tracking-wider">
-                    <User size={13} />
-                    <span>New Member Enrollment</span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-bold text-[#18221B]" style={{ fontFamily: "var(--font-outfit)" }}>
-                    Register for Mulembe18 Membership
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Connect with your sub-community elders and secure your family's welfare safety net.
-                  </p>
-                </div>
-
-                {errorMessage && (
-                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
-                    {errorMessage}
-                  </div>
-                )}
-
-                <div className="space-y-3.5 text-xs">
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">
-                      Full Legal Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={form.fullName}
-                      onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                      placeholder="e.g. Godfrey Wanyonyi Shikuku"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-gray-700 font-semibold mb-1">
-                        Mobile / M-Pesa Number <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        placeholder="e.g. 0712 345 678"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 font-semibold mb-1">Email Address</label>
-                      <input
-                        type="email"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        placeholder="e.g. godfrey@gmail.com"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-gray-700 font-semibold mb-1">
-                        Luhya Sub-Community (Clan) <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={form.subClan}
-                        onChange={(e) => setForm({ ...form, subClan: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                      >
-                        {luhyaClans.map((clan) => (
-                          <option key={clan} value={clan}>
-                            {clan}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-gray-700 font-semibold mb-1">
-                        Residential Zone in Coast <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={form.residentialZone}
-                        onChange={(e) => setForm({ ...form, residentialZone: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                      >
-                        {coastalZones.map((zone) => (
-                          <option key={zone} value={zone}>
-                            {zone}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Profession / Occupation</label>
-                    <input
-                      type="text"
-                      value={form.profession}
-                      onChange={(e) => setForm({ ...form, profession: e.target.value })}
-                      placeholder="e.g. Maritime Logistics Officer / Business Owner / Teacher"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Brief Bio or Village of Origin</label>
-                    <textarea
-                      rows={2}
-                      value={form.bio}
-                      onChange={(e) => setForm({ ...form, bio: e.target.value })}
-                      placeholder="e.g. Native of Kimilili, Bungoma; resident in Nyali, Mombasa since 2018."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D6E38]"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-3.5 rounded-xl bg-[#0D6E38] hover:bg-[#0a4d29] text-white font-bold text-xs sm:text-sm shadow-md transition-colors flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Submitting Registration to Clan Desk...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Complete Registration</span>
-                        <ArrowRight size={14} />
-                      </>
-                    )}
-                  </button>
-                  <p className="text-[10px] text-gray-400 text-center mt-2">
-                    By registering, you agree to uphold the peaceful solidarity principles of the Mulembe Constitution.
-                  </p>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
