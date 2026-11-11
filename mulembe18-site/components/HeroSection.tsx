@@ -21,8 +21,8 @@ const clans = [
   { name: "Marachi", region: "Butula" },
   { name: "Khayo", region: "Nambale" },
   { name: "Nyore", region: "Luanda" },
-  { name: "Gisu", region: "Mt. Elgon" },
-  { name: "Nandi-Luhya", region: "Borderlands" },
+  { name: "Badura", region: "Western" },
+  { name: "Banyala Ba Ndombi", region: "Navakholo" },
 ];
 
 export default function HeroSection() {

@@ -15,7 +15,7 @@ const quickLinks = [
 const subCommunities = [
   "Bukusu", "Maragoli", "Samia", "Wanga", "Tiriki", "Idakho",
   "Isukha", "Marama", "Banyore", "Kabras", "Batsotso", "Tachoni",
-  "Kisa", "Marachi", "Khayo", "Nyore", "Gisu", "Nandi",
+  "Kisa", "Marachi", "Khayo", "Nyore", "Badura", "Banyala Ba Ndombi",
 ];
 
 export default function Footer() {

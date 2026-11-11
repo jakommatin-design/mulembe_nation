@@ -38,7 +38,8 @@ const clansList = [
   "Marachi",
   "Khayo",
   "Nyore",
-  "Gisu",
+  "Badura",
+  "Banyala Ba Ndombi",
 ];
 
 export default function DirectorySection() {
