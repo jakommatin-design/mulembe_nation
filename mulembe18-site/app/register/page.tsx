@@ -42,8 +42,8 @@ const clans = [
   "Marachi",
   "Khayo",
   "Nyore",
-  "Gisu",
-  "Nandi-Luhya",
+  "Badura",
+  "Banyala Ba Ndombi",
 ];
 
 export default function RegisterPage() {

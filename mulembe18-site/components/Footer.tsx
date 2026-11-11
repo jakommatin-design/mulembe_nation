@@ -171,10 +171,6 @@ export default function Footer() {
           <div className="lg:col-span-3 space-y-3">
             <h4 className="font-bold text-sm text-[#DDA71D] uppercase tracking-wider" style={{ fontFamily: "var(--font-outfit)" }}>Secretariat Office</h4>
             <div className="space-y-2.5 text-xs text-emerald-200/80">
-              <p className="flex items-start gap-2.5">
-                <MapPin size={13} className="text-[#DDA71D] mt-0.5 flex-shrink-0" />
-                <span>Mulembe Centre, Links Road, Nyali, Mombasa County, Kenya</span>
-              </p>
               <p className="flex items-center gap-2.5">
                 <Phone size={13} className="text-[#DDA71D] flex-shrink-0" />
                 <span>+254 712 345 678 / +254 733 123 456</span>
