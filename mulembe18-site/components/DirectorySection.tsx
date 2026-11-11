@@ -120,7 +120,7 @@ export default function DirectorySection() {
               Member Directory
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              Registered and verified Luhya members residing across Mombasa County.
+              Registered and verified Luhya members residing across Kenya.
             </p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center gap-3">

@@ -39,9 +39,22 @@ export async function GET(req: Request) {
       }
     }
 
-    // 1. County Leadership (Top executive leaders from leadership_members table)
+    // 0. National Leadership (National Council of Elders & National Executives)
+    const nationalLeaders = await query<any>(
+      `SELECT name, role, phone, email, avatar_url, 'National Executive' AS level
+       FROM leadership_members
+       WHERE status = 'Active'
+       ORDER BY sort_order ASC
+       LIMIT 3`
+    );
+
+    // 1. County Leadership (Executive leaders representing member's county)
     const countyLeaders = await query<any>(
-      "SELECT name, role, phone, email, avatar_url, 'County Executive' AS level FROM leadership_members WHERE status = 'Active' ORDER BY sort_order ASC LIMIT 3"
+      `SELECT id, full_name AS name, 'County Leader' AS role, phone, email, avatar_url, 'County Executive' AS level, county
+       FROM members
+       WHERE (role = 'county_leader' OR role = 'super_admin' OR role = 'national_leader') AND (county = ? OR ? = 'Mombasa')
+       ORDER BY (role = 'county_leader') DESC, id ASC LIMIT 2`,
+      [memberCounty, memberCounty]
     );
 
     // 2. Subcounty Leader
@@ -103,11 +116,18 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       hierarchy: {
+        national: {
+          level: "National",
+          name: "National Leadership Council",
+          leaders: nationalLeaders.length > 0 ? nationalLeaders : [
+            { name: "National Governing Council", role: "National Council", phone: "0722 000000", email: "secretariat@mulembe18.co.ke" }
+          ],
+        },
         county: {
           level: "County",
-          name: memberCounty || "Mombasa County",
+          name: memberCounty ? `${memberCounty} County` : "Mombasa County",
           leaders: countyLeaders.length > 0 ? countyLeaders : [
-            { name: "Executive Governing Council", role: "County Council", phone: "0722 000000", email: "secretariat@mulembe18.org" }
+            { name: "County Governing Council", role: "County Council", phone: "0722 000000", email: "secretariat@mulembe18.co.ke" }
           ],
         },
         subcounty: {

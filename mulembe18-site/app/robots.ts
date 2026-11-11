@@ -11,7 +11,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/register", "/member-directory"],
+        allow: ["/", "/register", "/national-leaders"],
         disallow: [
           "/api/",
           "/dashboard",
@@ -22,18 +22,21 @@ export default function robots(): MetadataRoute.Robots {
           "/area-dashboard/*",
           "/subcounty-dashboard",
           "/subcounty-dashboard/*",
+          "/member-directory",
+          "/member-directory/*",
           "/_next/",
         ],
       },
       {
         userAgent: "Googlebot",
-        allow: ["/", "/register", "/member-directory"],
+        allow: ["/", "/register", "/national-leaders"],
         disallow: [
           "/api/",
           "/dashboard",
           "/ward-dashboard",
           "/area-dashboard",
           "/subcounty-dashboard",
+          "/member-directory",
         ],
       },
     ],

@@ -92,7 +92,7 @@ export default function AboutSection() {
           </h2>
 
           <p className="text-gray-600 text-sm sm:text-base leading-relaxed max-w-2xl mx-auto">
-            <strong>mulembe18</strong> was founded as the premier umbrella body unifying all 18 Luhya sub-communities residing, working, and flourishing across Mombasa County. We provide a cultural haven, an unbroken welfare safety net, and an empowered diaspora ecosystem.
+            <strong>mulembe18</strong> was founded as the premier umbrella body unifying all 18 Luhya sub-communities residing, working, and flourishing across Kenya. We provide a cultural haven, an unbroken welfare safety net, and an empowered diaspora ecosystem.
           </p>
         </div>
 
@@ -126,7 +126,7 @@ export default function AboutSection() {
             {/* Bottom Content */}
             <div className="p-6 sm:p-8 relative z-10 space-y-4 text-white">
               <h3 className="text-2xl sm:text-3xl font-extrabold leading-snug tracking-tight" style={{ fontFamily: "var(--font-outfit)" }}>
-                Bridging Western Kenya to Mombasa
+                Bridging Western Kenya Across the Nation
               </h3>
 
               <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed max-w-xl">

@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     // Check caller authentication
     const { userId } = await auth();
     let callerRole: string = "public";
+    let callerCounty: string | null = null;
     let callerSubcountyZone: string | null = null;
     let callerWard: string | null = null;
     let callerAreaId: number | null = null;
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
 
     if (userId) {
       let callerRows = await query<any>(
-        "SELECT id, full_name, email, role, subcounty_admin_zone, ward_leader_ward, area_leader_area_id FROM members WHERE clerk_id = ? LIMIT 1",
+        "SELECT id, full_name, email, role, county, county_leader_county, subcounty_admin_zone, ward_leader_ward, area_leader_area_id FROM members WHERE clerk_id = ? LIMIT 1",
         [userId]
       );
 
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
         const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress;
         if (userEmail) {
           callerRows = await query<any>(
-            "SELECT id, full_name, email, role, subcounty_admin_zone, ward_leader_ward, area_leader_area_id FROM members WHERE email = ? LIMIT 1",
+            "SELECT id, full_name, email, role, county, county_leader_county, subcounty_admin_zone, ward_leader_ward, area_leader_area_id FROM members WHERE email = ? LIMIT 1",
             [userEmail.toLowerCase().trim()]
           );
           if (callerRows.length > 0) {
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
 
       if (callerRows.length > 0) {
         callerRole = callerRows[0].role || "member";
+        callerCounty = callerRows[0].county_leader_county || callerRows[0].county || "Mombasa";
         callerSubcountyZone = callerRows[0].subcounty_admin_zone || null;
         callerWard = callerRows[0].ward_leader_ward || null;
         callerAreaId = callerRows[0].area_leader_area_id ? Number(callerRows[0].area_leader_area_id) : null;
@@ -70,10 +72,21 @@ export async function GET(req: Request) {
 
     const selectFields = `
       id, full_name, email, phone, sub_clan, residential_zone,
-      county, subcounty, ward, area_id, area_name,
+      county, county_leader_county, subcounty, ward, area_id, area_name,
       profession, membership_no, role, subcounty_admin_zone,
       ward_leader_ward, area_leader_area_id, status, created_at, avatar_url, bio
     `;
+
+    // ── 0. Fetch Current Caller Profile (scope=me) ───────────────────
+    if (scope === "me") {
+      if (!userId || !callerMember) {
+        return NextResponse.json({ success: false, message: "Unauthorized or unlinked member profile." }, { status: 401 });
+      }
+      return NextResponse.json({
+        success: true,
+        member: callerMember,
+      });
+    }
 
     // ── 1. Enforce Area Leader Scope ──────────────────────────────────
     if (scope === "area" || callerRole === "area_leader") {
@@ -83,7 +96,7 @@ export async function GET(req: Request) {
 
       const isAreaLeader = callerRole === "area_leader" && callerAreaId;
       const isWardLeader = callerRole === "ward_leader";
-      const isHigherAdmin = callerRole === "super_admin" || callerRole === "subcounty_admin";
+      const isHigherAdmin = callerRole === "national_leader" || callerRole === "super_admin" || callerRole === "subcounty_admin";
 
       if (!isAreaLeader && !isWardLeader && !isHigherAdmin) {
         return NextResponse.json({ success: false, message: "Forbidden: Area Leader access required." }, { status: 403 });
@@ -146,7 +159,7 @@ export async function GET(req: Request) {
       }
 
       const isWardLeader = callerRole === "ward_leader" && callerWard;
-      const isHigherAdmin = callerRole === "super_admin" || callerRole === "subcounty_admin";
+      const isHigherAdmin = callerRole === "national_leader" || callerRole === "super_admin" || callerRole === "subcounty_admin";
 
       if (!isWardLeader && !isHigherAdmin) {
         return NextResponse.json({ success: false, message: "Forbidden: Ward Leader access required." }, { status: 403 });
@@ -215,12 +228,12 @@ export async function GET(req: Request) {
         return NextResponse.json({ success: false, message: "Unauthorized: Please log in." }, { status: 401 });
       }
 
-      if (callerRole !== "subcounty_admin" && callerRole !== "super_admin") {
+      if (callerRole !== "subcounty_admin" && callerRole !== "super_admin" && callerRole !== "national_leader") {
         return NextResponse.json({ success: false, message: "Forbidden: Subcounty Leader access required." }, { status: 403 });
       }
 
       let enforcedZone = callerSubcountyZone;
-      if (callerRole === "super_admin") {
+      if (callerRole === "super_admin" || callerRole === "national_leader") {
         enforcedZone = subcounty || null;
       }
 
@@ -280,11 +293,114 @@ export async function GET(req: Request) {
       });
     }
 
-    // ── 4. Standard Query (Public Directory or Super Admin) ───────────
+    // ── 3.5 Enforce County Leader Scope ────────────────────────────────
+    if (scope === "county" || callerRole === "county_leader") {
+      if (!userId) {
+        return NextResponse.json({ success: false, message: "Unauthorized: Please log in." }, { status: 401 });
+      }
+
+      const isCountyLeader = callerRole === "county_leader";
+      const isHigherAdmin = callerRole === "national_leader" || callerRole === "super_admin";
+
+      if (!isCountyLeader && !isHigherAdmin) {
+        return NextResponse.json({ success: false, message: "Forbidden: County Leader access required." }, { status: 403 });
+      }
+
+      let enforcedCounty = isCountyLeader ? callerCounty : (county || "all");
+
+      let countSql = "SELECT COUNT(*) AS total FROM members WHERE 1=1";
+      let dataSql = `SELECT ${selectFields} FROM members WHERE 1=1`;
+      const params: any[] = [];
+      const countParams: any[] = [];
+
+      if (enforcedCounty && enforcedCounty !== "all") {
+        countSql += " AND county = ?";
+        dataSql += " AND county = ?";
+        countParams.push(enforcedCounty);
+        params.push(enforcedCounty);
+      }
+
+      if (subcounty && subcounty !== "all") {
+        countSql += " AND (subcounty = ? OR residential_zone = ?)";
+        dataSql += " AND (subcounty = ? OR residential_zone = ?)";
+        countParams.push(subcounty, subcounty);
+        params.push(subcounty, subcounty);
+      }
+
+      if (ward && ward !== "all") {
+        countSql += " AND ward = ?";
+        dataSql += " AND ward = ?";
+        countParams.push(ward);
+        params.push(ward);
+      }
+
+      if (status && status !== "all") {
+        countSql += " AND status = ?";
+        dataSql += " AND status = ?";
+        countParams.push(status);
+        params.push(status);
+      }
+
+      if (search && search.trim()) {
+        const searchClause = " AND (full_name LIKE ? OR email LIKE ? OR phone LIKE ? OR membership_no LIKE ? OR profession LIKE ? OR area_name LIKE ?)";
+        const term = `%${search.trim()}%`;
+        countSql += searchClause;
+        dataSql += searchClause;
+        countParams.push(term, term, term, term, term, term);
+        params.push(term, term, term, term, term, term);
+      }
+
+      const totalResult = await query<any>(countSql, countParams);
+      const total = Number(totalResult[0]?.total || 0);
+
+      dataSql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+      params.push(limit, offset);
+
+      const members = await query<any>(dataSql, params);
+
+      return NextResponse.json({
+        success: true,
+        members,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+        callerRole,
+        assignedCounty: enforcedCounty || "All Counties",
+      });
+    }
+
+    // ── 4. Standard Query (Leaders Only Access) ──────────────────────
+    const isLeader = [
+      "area_leader",
+      "ward_leader",
+      "subcounty_admin",
+      "county_leader",
+      "super_admin",
+      "national_leader",
+    ].includes(callerRole);
+
+    if (!isLeader) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Forbidden: The Member Directory is reserved for leadership only.",
+        },
+        { status: 403 }
+      );
+    }
+
     let sql = `SELECT ${selectFields} FROM members WHERE 1=1`;
     let countSql = "SELECT COUNT(*) AS total FROM members WHERE 1=1";
     const params: any[] = [];
     const countParams: any[] = [];
+
+    if (county && county !== "all") {
+      sql += " AND county = ?";
+      countSql += " AND county = ?";
+      params.push(county);
+      countParams.push(county);
+    }
 
     if (clan && clan !== "all") {
       sql += " AND sub_clan = ?";
@@ -432,6 +548,11 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ success: false, message: "Unauthorized: Please log in." }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       id,
@@ -455,6 +576,52 @@ export async function PUT(req: Request) {
     }
 
     await initDatabaseSchema();
+
+    let callerRows = await query<any>(
+      "SELECT id, full_name, email, role, county, county_leader_county, subcounty_admin_zone, ward_leader_ward, area_leader_area_id FROM members WHERE clerk_id = ? LIMIT 1",
+      [userId]
+    );
+
+    if (callerRows.length === 0) {
+      const clerkUser = await currentUser();
+      const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
+      if (email) {
+        callerRows = await query<any>(
+          "SELECT id, full_name, email, role, county, county_leader_county, subcounty_admin_zone, ward_leader_ward, area_leader_area_id FROM members WHERE email = ? LIMIT 1",
+          [email.toLowerCase().trim()]
+        );
+      }
+    }
+
+    const callerRole = callerRows[0]?.role || "member";
+    const callerCounty = callerRows[0]?.county_leader_county || callerRows[0]?.county || "Mombasa";
+    const callerSubcounty = callerRows[0]?.subcounty_admin_zone;
+    const callerWard = callerRows[0]?.ward_leader_ward;
+    const callerAreaId = callerRows[0]?.area_leader_area_id ? Number(callerRows[0].area_leader_area_id) : null;
+
+    if (callerRole === "member") {
+      return NextResponse.json({ success: false, message: "Forbidden: Leadership permissions required to update member status." }, { status: 403 });
+    }
+
+    // Verify target member is within jurisdiction if not national / super_admin
+    if (callerRole !== "national_leader" && callerRole !== "super_admin") {
+      const target = await query<any>("SELECT id, county, subcounty, ward, area_id FROM members WHERE id = ? LIMIT 1", [id]);
+      if (target.length === 0) return NextResponse.json({ success: false, message: "Target member not found." }, { status: 404 });
+      const t = target[0];
+
+      if (callerRole === "county_leader" && t.county && t.county.toLowerCase() !== callerCounty.toLowerCase()) {
+        return NextResponse.json({ success: false, message: "Forbidden: Member is outside your county." }, { status: 403 });
+      }
+      if (callerRole === "subcounty_admin" && t.subcounty && callerSubcounty && t.subcounty.toLowerCase() !== callerSubcounty.toLowerCase()) {
+        return NextResponse.json({ success: false, message: "Forbidden: Member is outside your subcounty." }, { status: 403 });
+      }
+      if (callerRole === "ward_leader" && t.ward && callerWard && t.ward.toLowerCase() !== callerWard.toLowerCase()) {
+        return NextResponse.json({ success: false, message: "Forbidden: Member is outside your ward." }, { status: 403 });
+      }
+      if (callerRole === "area_leader" && callerAreaId && Number(t.area_id) !== callerAreaId) {
+        return NextResponse.json({ success: false, message: "Forbidden: Member is outside your area." }, { status: 403 });
+      }
+    }
 
     await query(
       `UPDATE members

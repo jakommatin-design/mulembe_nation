@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { query, initDatabaseSchema } from "@/lib/db";
 import { clerkClient } from "@clerk/nextjs/server";
 import crypto from "crypto";
+import { isValidCounty } from "@/lib/locations";
+import { sendWelcomeNotification } from "@/lib/notifications";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -70,6 +72,9 @@ export async function POST(req: Request) {
     if (phone && !validatePhone(phone))
       errors.phone = "Please enter a valid Kenyan phone number (e.g. 0712 345678).";
     if (!subClan) errors.subClan = "Please select your ancestral Luhya sub-community / clan.";
+    if (!county || !isValidCounty(county)) {
+      errors.county = "A valid Kenyan county is required.";
+    }
     if (!resolvedSubcounty) errors.subcounty = "Please select your subcounty.";
     if (!ward) errors.ward = "Please select your ward (required dependent on subcounty).";
 
@@ -223,6 +228,15 @@ export async function POST(req: Request) {
           ]
         );
 
+        // Trigger welcome notification
+        sendWelcomeNotification({
+          name: fullName.trim(),
+          email: normalEmail,
+          phone: normalPhone,
+          membershipNo,
+          county: county || "Mombasa",
+        }).catch((err) => console.warn("[Register API] Welcome notification error:", err));
+
         return NextResponse.json({
           success: true,
           message: "Profile updated successfully!",
@@ -254,6 +268,15 @@ export async function POST(req: Request) {
         passwordHash,
       ]
     );
+
+    // Trigger welcome notification
+    sendWelcomeNotification({
+      name: fullName.trim(),
+      email: normalEmail,
+      phone: normalPhone,
+      membershipNo,
+      county: county || "Mombasa",
+    }).catch((err) => console.warn("[Register API] Welcome notification error:", err));
 
     return NextResponse.json({
       success: true,

@@ -159,8 +159,8 @@ export default function HeroSection() {
         {/* Mission Description */}
         <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mt-4 sm:mt-5 leading-relaxed font-normal">
           Uniting Luhya professionals, business leaders, families, students, and elders residing across
-          Mombasa County through cultural preservation, transparent mutual welfare assistance,
-          and coastal socio-economic solidarity.
+          Kenya through cultural preservation, transparent mutual welfare assistance,
+          and socio-economic solidarity.
         </p>
 
         {/* CTAs in Odoo Minimalist Pill Style */}

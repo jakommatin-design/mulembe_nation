@@ -147,7 +147,7 @@ export default function WelfareSection() {
           </h2>
           <p className="text-xs sm:text-sm text-gray-600 mt-4 max-w-xl mx-auto">
             A transparent diaspora safety net providing audited distress relief, bereavement transit
-            assistance, and youth bursaries for Luhya families in Mombasa.
+            assistance, and youth bursaries for Luhya families in Kenya.
           </p>
         </div>
 

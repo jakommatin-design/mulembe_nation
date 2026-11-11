@@ -97,7 +97,7 @@ export default function NewsSection() {
               </span>
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              Official announcements, cultural updates, welfare circulars, and member milestones across Mombasa.
+              Official announcements, cultural updates, welfare circulars, and member milestones across Kenya.
             </p>
           </div>
 

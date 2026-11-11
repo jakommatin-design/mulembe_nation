@@ -17,18 +17,19 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Mulembe18 — Luhya Community in Mombasa | One Community, Many Roots",
+    default: "Mulembe18 — Luhya Community in Kenya | One Community, Many Roots",
     template: "%s | Mulembe18",
   },
   description:
-    "Mulembe18 is the unifying welfare, social and cultural association connecting the Luhya diaspora across Mombasa County and Coastal Kenya — celebrate culture, support welfare, and grow together.",
+    "Mulembe18 is the unifying welfare, social and cultural association connecting the Luhya community across Kenya — celebrate culture, support welfare, and grow together.",
   keywords: [
     "Mulembe18",
     "Mulembe Nation",
+    "Luhya Community Kenya",
     "Luhya Community Mombasa",
     "Luhya diaspora Kenya",
-    "Mombasa Luhya welfare",
-    "Western Kenya Coast",
+    "Kenya Luhya welfare",
+    "Western Kenya",
     "Bukusu",
     "Maragoli",
     "Wanga",
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
     "Kisa",
     "Marama",
     "Tsotso",
-    "Mombasa cultural festival",
+    "Luhya cultural festival",
     "Mulembe association",
   ],
   authors: [{ name: "Mulembe18 Secretariat", url: siteUrl }],
@@ -76,9 +77,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Mulembe18 — Luhya Community in Mombasa | One Community, Many Roots",
+    title: "Mulembe18 — Luhya Community in Kenya | One Community, Many Roots",
     description:
-      "The official unifying welfare and cultural association for Luhya people living in Mombasa County. Emergency welfare support, cultural preservation, and grassroots community leadership.",
+      "The official unifying welfare and cultural association for Luhya people living in Kenya. Emergency welfare support, cultural preservation, and grassroots community leadership.",
     url: siteUrl,
     siteName: "Mulembe18",
     locale: "en_KE",
@@ -88,15 +89,15 @@ export const metadata: Metadata = {
         url: "/images/landing-hero.png",
         width: 1200,
         height: 630,
-        alt: "Mulembe18 Mombasa Chapter",
+        alt: "Mulembe18 Kenya Chapter",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Mulembe18 — Luhya Community in Mombasa",
+    title: "Mulembe18 — Luhya Community in Kenya",
     description:
-      "One Community, Many Roots, Stronger Together. Unifying the Luhya diaspora across Mombasa & Coastal Kenya.",
+      "One Community, Many Roots, Stronger Together. Unifying the Luhya community across Kenya.",
     images: ["/images/landing-hero.png"],
   },
 };
@@ -108,15 +109,15 @@ const jsonLd = {
       "@type": "NGO",
       "@id": `${siteUrl}/#organization`,
       name: "Mulembe18 Association",
-      alternateName: ["Mulembe 18", "Mulembe Nation Mombasa Chapter", "Mulembe18 Mombasa"],
+      alternateName: ["Mulembe 18", "Mulembe Nation Kenya Chapter", "Mulembe18 Kenya"],
       url: siteUrl,
       logo: `${siteUrl}/images/logo.png`,
       image: `${siteUrl}/images/landing-hero.png`,
       description:
-        "The unifying welfare, social and cultural association for Luhya people across Mombasa and Coastal Kenya.",
+        "The unifying welfare, social and cultural association for Luhya people across Kenya.",
       areaServed: {
         "@type": "AdministrativeArea",
-        name: "Mombasa County, Kenya",
+        name: "Kenya",
       },
       address: {
         "@type": "PostalAddress",
@@ -135,7 +136,7 @@ const jsonLd = {
       "@type": "WebSite",
       "@id": `${siteUrl}/#website`,
       url: siteUrl,
-      name: "Mulembe18 — Luhya Community in Mombasa",
+      name: "Mulembe18 — Luhya Community in Kenya",
       description: "One Community, Many Roots, Stronger Together.",
       publisher: {
         "@id": `${siteUrl}/#organization`,

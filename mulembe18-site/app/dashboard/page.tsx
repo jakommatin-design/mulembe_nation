@@ -8,16 +8,17 @@ import {
   LogOut, Smartphone, Shield, HeartHandshake, Heart, Landmark, Megaphone,
   BarChart3, Receipt, Ticket, AlertCircle, Menu, X, Compass, PanelLeftClose,
   PanelLeftOpen, MapPin, Check, Star, Trash2, PlusCircle, CalendarDays,
-  RefreshCw, Image as ImageIcon, Edit3, Crown, TrendingUp, Building,
+  RefreshCw, Image as ImageIcon, Edit3, Crown, TrendingUp, Building, Award,
+  Send, CheckCheck, Radio, Layers, FileText, CheckCircle, XCircle,
 } from "lucide-react";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import NumberTicker from "@/components/magicui/number-ticker";
 import { normalizeImageUrl } from "@/lib/image-utils";
-import { KENYA_LOCATIONS, getSubcounties, getWards } from "@/lib/locations";
+import { KENYA_LOCATIONS, KENYA_COUNTIES, getSubcounties, getWards } from "@/lib/locations";
 
-type DashboardRole = "member" | "admin";
+type DashboardRole = "member" | "leader";
 type MemberTab = "overview" | "my-leadership" | "contributions" | "events" | "welfare-claim" | "clan-desk";
-type AdminTab = "analytics" | "events" | "claims" | "members" | "solidarity" | "broadcast" | "gallery" | "leadership";
+type AdminTab = "analytics" | "members" | "dispatch" | "areas" | "events" | "claims" | "solidarity" | "broadcast" | "gallery" | "leadership";
 
 /* ─── Reusable Atoms ─────────────────────────────────────────── */
 const Spinner = () => (
@@ -120,12 +121,84 @@ export default function DashboardPage() {
   // Role Management
   const [roleModalMember, setRoleModalMember] = useState<any | null>(null);
   const [assignedRole, setAssignedRole] = useState<string>("member");
+  const [assignedCounty, setAssignedCounty] = useState<string>("Mombasa");
   const [assignedZone, setAssignedZone] = useState<string>("Nyali");
   const [assignedWard, setAssignedWard] = useState<string>("");
   const [assignedAreaId, setAssignedAreaId] = useState<string>("");
   const [assigningRole, setAssigningRole] = useState(false);
 
+  // Caller Profile & Role-Aware View Mode
+  const [callerProfile, setCallerProfile] = useState<any | null>(null);
+  const [viewMode, setViewMode] = useState<"leader" | "member">("leader");
+
+  // Dispatch States
+  const [dispatchChannel, setDispatchChannel] = useState<"email" | "sms" | "both">("both");
+  const [dispatchTargetType, setDispatchTargetType] = useState<"all" | "selected">("all");
+  const [dispatchSubject, setDispatchSubject] = useState("");
+  const [dispatchMessage, setDispatchMessage] = useState("");
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<number[]>([]);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [dispatchRecipients, setDispatchRecipients] = useState<any[]>([]);
+  const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
+  const [loadingDispatchData, setLoadingDispatchData] = useState(false);
+  const [dispatchSubmitting, setDispatchSubmitting] = useState(false);
+  const [dispatchConfirmModalOpen, setDispatchConfirmModalOpen] = useState(false);
+  const [dispatchNotice, setDispatchNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Custom Areas Management States
+  const [allAreasList, setAllAreasList] = useState<any[]>([]);
+  const [loadingAreasList, setLoadingAreasList] = useState(false);
+  const [newAreaName, setNewAreaName] = useState("");
+  const [newAreaWard, setNewAreaWard] = useState("");
+  const [newAreaSubcounty, setNewAreaSubcounty] = useState("");
+  const [newAreaCounty, setNewAreaCounty] = useState("Mombasa");
+  const [newAreaDesc, setNewAreaDesc] = useState("");
+  const [newAreaContact, setNewAreaContact] = useState("");
+  const [creatingArea, setCreatingArea] = useState(false);
+  const [assignLeaderModalArea, setAssignLeaderModalArea] = useState<any | null>(null);
+  const [selectedAreaLeaderId, setSelectedAreaLeaderId] = useState<string>("");
+  const [assigningAreaLeader, setAssigningAreaLeader] = useState(false);
+
   // Fetchers
+  const fetchCallerProfile = async () => {
+    try {
+      const r = await fetch("/api/members?scope=me");
+      const d = await r.json();
+      if (d.success && d.member) setCallerProfile(d.member);
+    } catch (e) {
+      console.warn("Failed to fetch caller profile:", e);
+    }
+  };
+
+  const fetchDispatchData = async () => {
+    setLoadingDispatchData(true);
+    try {
+      const r = await fetch("/api/dispatch");
+      const d = await r.json();
+      if (d.success) {
+        setDispatchRecipients(d.recipients || []);
+        setDispatchLogs(d.logs || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch dispatch data:", e);
+    } finally {
+      setLoadingDispatchData(false);
+    }
+  };
+
+  const fetchAllAreas = async () => {
+    setLoadingAreasList(true);
+    try {
+      const r = await fetch("/api/areas?activeOnly=false");
+      const d = await r.json();
+      if (d.success) setAllAreasList(d.areas || []);
+    } catch (e) {
+      console.error("Failed to fetch all areas:", e);
+    } finally {
+      setLoadingAreasList(false);
+    }
+  };
+
   const fetchHierarchy = async () => {
     setLoadingHierarchy(true);
     try {
@@ -164,6 +237,7 @@ export default function DashboardPage() {
   };
   useEffect(() => {
     setMounted(true);
+    fetchCallerProfile();
     fetchAllEvents();
     fetchAllNews();
     fetchAllGallery();
@@ -172,12 +246,45 @@ export default function DashboardPage() {
     fetchAllMembers();
     fetchAllContributions();
     fetchAllAppeals();
+    fetchDispatchData();
+    fetchAllAreas();
   }, []);
 
-  // Derived
-  const currentMember = useMemo(() => membersList.find(m => (user?.primaryEmailAddress?.emailAddress && m.email?.toLowerCase() === user.primaryEmailAddress.emailAddress.toLowerCase())), [membersList, user]);
-  const isSuperAdmin = useMemo(() => currentMember?.role === "super_admin", [currentMember]);
-  const role: DashboardRole = isSuperAdmin ? "admin" : "member";
+  // Derived Member & Role
+  const currentMember = useMemo(
+    () =>
+      callerProfile ||
+      membersList.find(
+        (m) =>
+          user?.primaryEmailAddress?.emailAddress &&
+          m.email?.toLowerCase() === user.primaryEmailAddress.emailAddress.toLowerCase()
+      ),
+    [callerProfile, membersList, user]
+  );
+
+  const userRole = currentMember?.role || (user?.publicMetadata?.role as string) || "member";
+  const isNationalLeader = useMemo(() => userRole === "national_leader", [userRole]);
+  const isSuperAdmin = useMemo(() => userRole === "super_admin" || isNationalLeader, [userRole, isNationalLeader]);
+  const isCountyLeader = useMemo(() => userRole === "county_leader", [userRole]);
+  const isSubcountyAdmin = useMemo(() => userRole === "subcounty_admin", [userRole]);
+  const isWardLeader = useMemo(() => userRole === "ward_leader", [userRole]);
+  const isAreaLeader = useMemo(() => userRole === "area_leader", [userRole]);
+  const isLeader = useMemo(
+    () => isSuperAdmin || isCountyLeader || isSubcountyAdmin || isWardLeader || isAreaLeader,
+    [isSuperAdmin, isCountyLeader, isSubcountyAdmin, isWardLeader, isAreaLeader]
+  );
+
+  const role: DashboardRole = isLeader && viewMode === "leader" ? "leader" : "member";
+
+  const jurisdictionLabel = useMemo(() => {
+    if (isNationalLeader) return "National Leadership Council (All 47 Counties)";
+    if (isSuperAdmin) return "National Super Admin (All 47 Counties)";
+    if (isCountyLeader) return `${currentMember?.county_leader_county || currentMember?.county || "Mombasa"} County`;
+    if (isSubcountyAdmin) return `${currentMember?.subcounty_admin_zone || currentMember?.subcounty || "Assigned"} Sub-County`;
+    if (isWardLeader) return `${currentMember?.ward_leader_ward || currentMember?.ward || "Assigned"} Ward`;
+    if (isAreaLeader) return `Area #${currentMember?.area_leader_area_id || "1"} (${currentMember?.area_name || "Assigned Area"})`;
+    return "Mulembe18 Kenya Community";
+  }, [isNationalLeader, isSuperAdmin, isCountyLeader, isSubcountyAdmin, isWardLeader, isAreaLeader, currentMember]);
   const userContributions = useMemo(() => contributionsList.filter(c => currentMember && (c.member_name?.toLowerCase().includes(currentMember.full_name?.toLowerCase().split(" ")[0]) || (currentMember.phone && c.phone === currentMember.phone))), [contributionsList, currentMember]);
   const userTotalContributed = useMemo(() => userContributions.reduce((s, c) => s + (Number(c.amount) || 0), 0), [userContributions]);
   const hasPaidDues = useMemo(() => userContributions.some(c => c.purpose?.toLowerCase().includes("dues") || c.purpose?.toLowerCase().includes("membership") || (Number(c.amount) >= 500 && c.status === "Completed")), [userContributions]);
@@ -211,6 +318,132 @@ export default function DashboardPage() {
   const handleDeleteClaim = async (id: any) => { if (!confirm("Remove record?")) return; const r = await fetch(`/api/welfare?id=${id}`, { method: "DELETE" }); const d = await r.json(); if (d.success) fetchAllClaims(); };
   const handleVerifyMember = async (id: any) => { const r = await fetch("/api/members", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: "Verified" }) }); const d = await r.json(); if (d.success) fetchAllMembers(); };
   const handleDeleteMember = async (id: any) => { if (!confirm("Remove member?")) return; const r = await fetch(`/api/members?id=${id}`, { method: "DELETE" }); const d = await r.json(); if (d.success) fetchAllMembers(); };
+
+  const handleUpdateMemberStatus = async (memberId: number, newStatus: string) => {
+    try {
+      const res = await fetch("/api/members", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memberId, status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchAllMembers();
+        fetchDispatchData();
+      } else {
+        alert(data.message || "Failed to update member status.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Network error");
+    }
+  };
+
+  const handleSendDispatch = async () => {
+    if (!dispatchMessage.trim()) return alert("Message body cannot be empty.");
+    if ((dispatchChannel === "email" || dispatchChannel === "both") && !dispatchSubject.trim()) {
+      return alert("Email subject line is required.");
+    }
+    if (dispatchTargetType === "selected" && selectedRecipientIds.length === 0) {
+      return alert("Please select at least one recipient member.");
+    }
+
+    setDispatchSubmitting(true);
+    try {
+      const res = await fetch("/api/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: dispatchChannel,
+          targetType: dispatchTargetType === "all" ? "all_in_scope" : "selected_members",
+          selectedMemberIds: dispatchTargetType === "all" ? undefined : selectedRecipientIds,
+          subject: dispatchSubject.trim(),
+          message: dispatchMessage.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDispatchConfirmModalOpen(false);
+        setDispatchMessage("");
+        setDispatchSubject("");
+        setSelectedRecipientIds([]);
+        setDispatchNotice({ type: "success", text: data.message || "Dispatch sent successfully!" });
+        setTimeout(() => setDispatchNotice(null), 6000);
+        await fetchDispatchData();
+      } else {
+        alert(data.message || "Failed to broadcast dispatch.");
+      }
+    } catch (err: any) {
+      alert("Dispatch error: " + (err?.message || "Network error"));
+    } finally {
+      setDispatchSubmitting(false);
+    }
+  };
+
+  const handleCreateArea = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAreaName.trim()) return alert("Area name is required.");
+    setCreatingArea(true);
+    try {
+      const targetWard = isWardLeader ? (currentMember?.ward_leader_ward || currentMember?.ward) : newAreaWard;
+      const res = await fetch("/api/areas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newAreaName.trim(),
+          ward: targetWard,
+          subcounty: newAreaSubcounty || currentMember?.subcounty || "Mombasa",
+          county: newAreaCounty || currentMember?.county || "Mombasa",
+          description: newAreaDesc.trim(),
+          contactInfo: newAreaContact.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNewAreaName("");
+        setNewAreaDesc("");
+        setNewAreaContact("");
+        fetchAllAreas();
+        if (targetWard) fetchWardAreas(targetWard);
+        alert("Area created successfully!");
+      } else {
+        alert(data.message || "Failed to create area.");
+      }
+    } catch (err: any) {
+      alert("Error creating area: " + err?.message);
+    } finally {
+      setCreatingArea(false);
+    }
+  };
+
+  const handleAssignAreaLeader = async (areaId: number, memberId: number) => {
+    setAssigningAreaLeader(true);
+    try {
+      const res = await fetch("/api/admin/assign-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetMemberId: memberId,
+          newRole: "area_leader",
+          areaId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAssignLeaderModalArea(null);
+        setSelectedAreaLeaderId("");
+        fetchAllAreas();
+        fetchAllMembers();
+        alert("Area leader assigned successfully!");
+      } else {
+        alert(data.message || "Failed to assign area leader.");
+      }
+    } catch (err: any) {
+      alert("Error assigning area leader: " + err?.message);
+    } finally {
+      setAssigningAreaLeader(false);
+    }
+  };
+
   const handleAssignRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roleModalMember) return;
@@ -222,6 +455,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           targetMemberId: roleModalMember.id,
           newRole: assignedRole,
+          county: assignedRole === "county_leader" ? assignedCounty : undefined,
           subcountyZone: assignedRole === "subcounty_admin" ? assignedZone : undefined,
           ward: assignedRole === "ward_leader" ? assignedWard : undefined,
           areaId: assignedRole === "area_leader" && assignedAreaId ? Number(assignedAreaId) : undefined,
@@ -296,16 +530,35 @@ export default function DashboardPage() {
     { id: "clan-desk", label: "Clan Elders Desk", icon: Landmark, color: "text-amber-400 bg-amber-500/10" },
   ];
   const adminNav = [
-    { id: "analytics", label: "Treasury & Inflows", icon: BarChart3, badge: null as number | null, color: "text-emerald-400 bg-emerald-500/10" },
-    { id: "events", label: "Events", icon: Calendar, badge: eventsList.length || null, color: "text-[#DDA71D] bg-[#DDA71D]/10" },
-    { id: "claims", label: "Claims", icon: AlertCircle, badge: pendingClaims.length || null, color: "text-amber-400 bg-amber-500/10" },
-    { id: "members", label: "Registry", icon: Users, badge: membersList.length || null, color: "text-blue-400 bg-blue-500/10" },
-    { id: "solidarity", label: "Solidarity Fund", icon: CreditCard, badge: null as number | null, color: "text-cyan-400 bg-cyan-500/10" },
+    { id: "analytics", label: "Overview & Stats", icon: BarChart3, badge: null as number | null, color: "text-emerald-400 bg-emerald-500/10" },
+    { id: "dispatch", label: "SMS & Email Dispatch", icon: Send, badge: null as number | null, color: "text-amber-400 bg-amber-500/10" },
+    { id: "members", label: "Registry & Approvals", icon: Users, badge: membersList.length || null, color: "text-blue-400 bg-blue-500/10" },
+    { id: "areas", label: "Areas & Zones", icon: Layers, badge: allAreasList.length || null, color: "text-teal-400 bg-teal-500/10" },
     { id: "broadcast", label: "Communiqués", icon: Megaphone, badge: newsList.length || null, color: "text-purple-400 bg-purple-500/10" },
-    { id: "gallery", label: "Gallery", icon: ImageIcon, badge: galleryList.length || null, color: "text-rose-400 bg-rose-500/10" },
-    { id: "leadership", label: "Leadership", icon: Crown, badge: leadershipList.length || null, color: "text-amber-400 bg-amber-500/10" },
+    { id: "events", label: "Events", icon: Calendar, badge: eventsList.length || null, color: "text-[#DDA71D] bg-[#DDA71D]/10" },
+    { id: "claims", label: "Claims", icon: AlertCircle, badge: pendingClaims.length || null, color: "text-rose-400 bg-rose-500/10" },
+    { id: "solidarity", label: "Solidarity Fund", icon: CreditCard, badge: null as number | null, color: "text-cyan-400 bg-cyan-500/10" },
+    { id: "gallery", label: "Gallery", icon: ImageIcon, badge: galleryList.length || null, color: "text-pink-400 bg-pink-500/10" },
+    { id: "leadership", label: "Leadership Council", icon: Crown, badge: leadershipList.length || null, color: "text-amber-400 bg-amber-500/10" },
   ];
-  const currentNav = role === "member" ? memberNav : adminNav;
+
+  const currentAdminNav = useMemo(() => {
+    if (isAreaLeader) {
+      return adminNav.filter((n) => ["analytics", "dispatch", "members", "broadcast"].includes(n.id));
+    }
+    if (isWardLeader) {
+      return adminNav.filter((n) => ["analytics", "dispatch", "members", "areas", "broadcast", "events"].includes(n.id));
+    }
+    if (isSubcountyAdmin) {
+      return adminNav.filter((n) => ["analytics", "dispatch", "members", "areas", "broadcast", "events"].includes(n.id));
+    }
+    if (isCountyLeader) {
+      return adminNav.filter((n) => ["analytics", "dispatch", "members", "areas", "broadcast", "events", "claims"].includes(n.id));
+    }
+    return adminNav; // Super Admin / National Leader
+  }, [isAreaLeader, isWardLeader, isSubcountyAdmin, isCountyLeader, adminNav]);
+
+  const currentNav = role === "member" ? memberNav : currentAdminNav;
   const currentTab = role === "member" ? memberTab : adminTab;
 
   const NavItem = ({ item }: { item: any }) => {
@@ -321,7 +574,7 @@ export default function DashboardPage() {
     return (
       <button type="button" onClick={handleClick} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition-all group relative cursor-pointer ${isActive ? "bg-white/10 text-white border border-white/10" : "text-emerald-200/70 hover:bg-white/5 hover:text-white"}`}>
         {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-[#DDA71D]" />}
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? (role === "admin" ? "bg-[#00A859] text-white" : "bg-[#DDA71D] text-[#082f1a]") : item.color}`}><Icon size={14} /></div>
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? (role === "leader" ? "bg-[#00A859] text-white" : "bg-[#DDA71D] text-[#082f1a]") : item.color}`}><Icon size={14} /></div>
         <span className="text-[12px] font-semibold truncate flex-1">{item.label}</span>
         {item.badge != null && item.badge > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-white flex-shrink-0">{item.badge}</span>}
       </button>
@@ -359,42 +612,58 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <div className="text-sm font-black text-white" style={{ fontFamily: "var(--font-outfit)" }}>mulembe<span className="text-[#DDA71D]">18</span></div>
-                    <div className="text-[9px] text-emerald-400 uppercase tracking-widest font-semibold">Mombasa Chapter</div>
+                    <div className="text-[9px] text-emerald-400 uppercase tracking-widest font-semibold">Kenya Chapter</div>
                   </div>
                 </Link>
                 <button type="button" onClick={() => setIsCollapsed(true)} className="hidden md:flex p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-emerald-300 cursor-pointer"><PanelLeftClose size={13} /></button>
               </div>
               <div className="px-2.5 py-1.5 rounded-xl bg-black/30 border border-emerald-900/70 flex items-center gap-2">
-                {role === "admin" ? (
+                {isNationalLeader ? (
+                  <>
+                    <Award size={13} className="text-[#DDA71D] flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">National Leader</div>
+                      <div className="text-[9px] text-[#DDA71D] font-semibold truncate">All 47 Counties</div>
+                    </div>
+                  </>
+                ) : isSuperAdmin ? (
                   <>
                     <Shield size={13} className="text-[#DDA71D] flex-shrink-0" />
                     <div className="min-w-0">
                       <div className="text-[11px] font-black text-white uppercase tracking-wider">Super Admin</div>
-                      <div className="text-[9px] text-[#DDA71D] font-semibold truncate">County Governance</div>
+                      <div className="text-[9px] text-[#DDA71D] font-semibold truncate">National Governance</div>
                     </div>
                   </>
-                ) : currentMember?.role === "ward_leader" ? (
+                ) : isCountyLeader ? (
+                  <>
+                    <Building size={13} className="text-[#DDA71D] flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">County Leader</div>
+                      <div className="text-[9px] text-[#DDA71D] font-semibold truncate">{currentMember?.county_leader_county || currentMember?.county || "County"}</div>
+                    </div>
+                  </>
+                ) : currentMember?.role === "subcounty_admin" || isSubcountyAdmin ? (
+                  <>
+                    <Building size={13} className="text-blue-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Subcounty Leader</div>
+                      <div className="text-[9px] text-blue-300 font-semibold truncate">{currentMember?.subcounty_admin_zone || currentMember?.subcounty || "Subcounty"}</div>
+                    </div>
+                  </>
+                ) : currentMember?.role === "ward_leader" || isWardLeader ? (
                   <>
                     <Crown size={13} className="text-amber-400 flex-shrink-0" />
                     <div className="min-w-0">
                       <div className="text-[11px] font-black text-white uppercase tracking-wider">Ward Leader</div>
-                      <div className="text-[9px] text-amber-300 font-semibold truncate">{currentMember.ward_leader_ward || currentMember.ward || "Ward"}</div>
+                      <div className="text-[9px] text-amber-300 font-semibold truncate">{currentMember?.ward_leader_ward || currentMember?.ward || "Ward"}</div>
                     </div>
                   </>
-                ) : currentMember?.role === "area_leader" ? (
+                ) : currentMember?.role === "area_leader" || isAreaLeader ? (
                   <>
                     <MapPin size={13} className="text-emerald-400 flex-shrink-0" />
                     <div className="min-w-0">
                       <div className="text-[11px] font-black text-white uppercase tracking-wider">Area Leader</div>
-                      <div className="text-[9px] text-emerald-300 font-semibold truncate">{currentMember.area_name || "Local Area"}</div>
-                    </div>
-                  </>
-                ) : currentMember?.role === "subcounty_admin" ? (
-                  <>
-                    <Building size={13} className="text-blue-400 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-black text-white uppercase tracking-wider">Subcounty Admin</div>
-                      <div className="text-[9px] text-blue-300 font-semibold truncate">{currentMember.subcounty_admin_zone || currentMember.subcounty || "Subcounty"}</div>
+                      <div className="text-[9px] text-emerald-300 font-semibold truncate">{currentMember?.area_name || "Local Area"}</div>
                     </div>
                   </>
                 ) : (
@@ -402,90 +671,69 @@ export default function DashboardPage() {
                     <Users size={13} className="text-emerald-400 flex-shrink-0" />
                     <div className="min-w-0">
                       <div className="text-[11px] font-black text-white uppercase tracking-wider">Member Portal</div>
-                      <div className="text-[9px] text-emerald-300/80 font-semibold truncate">Mulembe18 Coastal Pulse</div>
+                      <div className="text-[9px] text-emerald-300/80 font-semibold truncate">Mulembe18 Kenya Community</div>
                     </div>
                   </>
                 )}
               </div>
+              {isLeader && (
+                <div className="flex bg-black/40 rounded-xl p-0.5 border border-emerald-900/60 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("leader")}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      viewMode === "leader" ? "bg-[#0D6E38] text-white shadow-sm" : "text-emerald-300/70 hover:text-white"
+                    }`}
+                  >
+                    <Shield size={11} />
+                    <span>Workspace</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("member")}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      viewMode === "member" ? "bg-[#DDA71D] text-[#082f1a] shadow-sm" : "text-emerald-300/70 hover:text-white"
+                    }`}
+                  >
+                    <Users size={11} />
+                    <span>My Profile</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
               <Link href="/"><div className="w-9 h-9 rounded-xl overflow-hidden bg-white/10 border border-[#DDA71D]/40 p-0.5"><img src="/images/logo.png" alt="Mulembe18" className="w-full h-full object-contain rounded-lg" /></div></Link>
               <button type="button" onClick={() => setIsCollapsed(false)} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 text-emerald-300 flex items-center justify-center cursor-pointer"><PanelLeftOpen size={13} /></button>
               <div className="w-full flex flex-col items-center gap-1 pt-1 border-t border-emerald-900/60">
-                <div
-                  title={role === "admin" ? "County Governance Console" : "Member Portal"}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    role === "admin" ? "bg-[#0D6E38] text-[#DDA71D]" : "bg-white/10 text-emerald-300"
+                <button
+                  type="button"
+                  onClick={() => isLeader && setViewMode(viewMode === "leader" ? "member" : "leader")}
+                  title={role === "leader" ? "Leadership Workspace (Click to toggle)" : "Member Portal (Click to toggle)"}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer ${
+                    role === "leader" ? "bg-[#0D6E38] text-[#DDA71D]" : "bg-white/10 text-emerald-300"
                   }`}
                 >
-                  {role === "admin" ? <Shield size={14} /> : <Users size={14} />}
-                </div>
+                  {role === "leader" ? <Shield size={14} /> : <Users size={14} />}
+                </button>
               </div>
             </div>
           )}
         </div>
 
         <div className={`p-2 flex-1 overflow-y-auto space-y-0.5 ${mobileMenuOpen ? "block" : "hidden md:block"}`}>
-          {!isCollapsed && <div className="text-[9px] uppercase font-bold tracking-widest text-emerald-700/80 px-2 py-1.5 flex items-center gap-1.5"><Compass size={9} />{role === "member" ? "Member Services" : "Governance Console"}</div>}
+          {!isCollapsed && <div className="text-[9px] uppercase font-bold tracking-widest text-emerald-700/80 px-2 py-1.5 flex items-center gap-1.5"><Compass size={9} />{role === "member" ? "Member Services" : "Leadership Console"}</div>}
           {currentNav.map(item => <NavItem key={item.id} item={item} />)}
 
           {/* Quick Leadership Dashboards (Role-based) */}
           {!isCollapsed && (
             <div className="pt-2 mt-2 border-t border-emerald-900/60 space-y-1">
-              {role === "admin" && (
+              {role === "leader" && (
                 <>
                   <div className="text-[9px] uppercase font-bold tracking-widest text-[#DDA71D] px-2 py-1 flex items-center gap-1">
-                    <Shield size={9} /> Management Consoles
+                    <Shield size={9} /> Jurisdictions
                   </div>
-                  <Link
-                    href="/subcounty-dashboard"
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-400/10 hover:bg-blue-400/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold transition-all"
-                  >
-                    <Building size={12} className="text-blue-400 flex-shrink-0" />
-                    <span className="truncate">Subcounty Console</span>
-                  </Link>
-                  <Link
-                    href="/ward-dashboard"
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
-                  >
-                    <Crown size={12} className="text-amber-400 flex-shrink-0" />
-                    <span className="truncate">Ward Leader Console</span>
-                  </Link>
-                  <Link
-                    href="/area-dashboard"
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
-                  >
-                    <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
-                    <span className="truncate">Area Leader Console</span>
-                  </Link>
-                </>
-              )}
-
-              {role === "member" && currentMember && (currentMember.role === "ward_leader" || currentMember.role === "area_leader" || currentMember.role === "subcounty_admin") && (
-                <>
-                  <div className="text-[9px] uppercase font-bold tracking-widest text-amber-400/80 px-2 py-1 flex items-center gap-1">
-                    <Crown size={9} /> My Leadership Consoles
-                  </div>
-                  {currentMember.role === "ward_leader" && (
-                    <Link
-                      href="/ward-dashboard"
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
-                    >
-                      <Crown size={12} className="text-amber-400 flex-shrink-0" />
-                      <span className="truncate">Ward Leader Console</span>
-                    </Link>
-                  )}
-                  {currentMember.role === "area_leader" && (
-                    <Link
-                      href="/area-dashboard"
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
-                    >
-                      <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
-                      <span className="truncate">Area Leader Console</span>
-                    </Link>
-                  )}
-                  {currentMember.role === "subcounty_admin" && (
+                  {(isSuperAdmin || isCountyLeader) && (
                     <Link
                       href="/subcounty-dashboard"
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-400/10 hover:bg-blue-400/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold transition-all"
@@ -494,7 +742,36 @@ export default function DashboardPage() {
                       <span className="truncate">Subcounty Console</span>
                     </Link>
                   )}
+                  {(isSuperAdmin || isCountyLeader || isSubcountyAdmin || isWardLeader) && (
+                    <Link
+                      href="/ward-dashboard"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold transition-all"
+                    >
+                      <Crown size={12} className="text-amber-400 flex-shrink-0" />
+                      <span className="truncate">Ward Leader Console</span>
+                    </Link>
+                  )}
+                  {(isSuperAdmin || isCountyLeader || isSubcountyAdmin || isWardLeader || isAreaLeader) && (
+                    <Link
+                      href="/area-dashboard"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold transition-all"
+                    >
+                      <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
+                      <span className="truncate">Area Leader Console</span>
+                    </Link>
+                  )}
                 </>
+              )}
+
+              {role === "member" && isLeader && (
+                <button
+                  type="button"
+                  onClick={() => setViewMode("leader")}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl bg-gradient-to-r from-emerald-950 to-[#0D6E38] text-white border border-[#DDA71D]/40 text-[11px] font-bold shadow-sm transition-all cursor-pointer hover:border-[#DDA71D]"
+                >
+                  <Shield size={13} className="text-[#DDA71D] flex-shrink-0" />
+                  <span className="truncate">Open Leadership Console</span>
+                </button>
               )}
             </div>
           )}
@@ -528,18 +805,63 @@ export default function DashboardPage() {
             <button type="button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-1.5 rounded-lg border border-gray-200 text-gray-500 cursor-pointer">{mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}</button>
             <div>
               <h1 className="text-sm font-bold text-[#18221B]" style={{ fontFamily: "var(--font-outfit)" }}>
-                {role === "member" ? (memberTab === "overview" ? "My Profile" : memberTab === "my-leadership" ? "My Leadership Hierarchy" : memberTab === "contributions" ? "Welfare Ledger" : memberTab === "events" ? "Event Passes" : memberTab === "welfare-claim" ? "Emergency Aid" : "Clan Desk") : (adminTab === "analytics" ? "Treasury & Inflows" : adminTab === "events" ? "Events Manager" : adminTab === "claims" ? "Claims Review" : adminTab === "members" ? "Member Registry" : adminTab === "solidarity" ? "Solidarity Fund" : adminTab === "broadcast" ? "Communiqués" : adminTab === "gallery" ? "Gallery Manager" : "Leadership")}
+                {role === "member"
+                  ? memberTab === "overview"
+                    ? "My Profile & Digital ID"
+                    : memberTab === "my-leadership"
+                    ? "My Leadership Hierarchy"
+                    : memberTab === "contributions"
+                    ? "Welfare Ledger"
+                    : memberTab === "events"
+                    ? "Event Passes"
+                    : memberTab === "welfare-claim"
+                    ? "Emergency Aid"
+                    : "Clan Desk"
+                  : adminTab === "analytics"
+                  ? "Executive Overview & Metrics"
+                  : adminTab === "dispatch"
+                  ? "SMS & Email Broadcast Dispatch"
+                  : adminTab === "members"
+                  ? "Member Registry & KYC Approvals"
+                  : adminTab === "areas"
+                  ? "Ward & Area Management"
+                  : adminTab === "events"
+                  ? "Events Manager"
+                  : adminTab === "claims"
+                  ? "Claims Review"
+                  : adminTab === "solidarity"
+                  ? "Solidarity Fund"
+                  : adminTab === "broadcast"
+                  ? "Communiqués"
+                  : adminTab === "gallery"
+                  ? "Gallery Manager"
+                  : "Leadership Council"}
               </h1>
-              <p className="text-[10px] text-gray-400">{role === "member" ? "Member Portal" : "Admin Console"}</p>
+              <p className="text-[10px] text-gray-500 font-medium">
+                {role === "member" ? "Personal Member Portal" : jurisdictionLabel}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {role === "member" && <button type="button" onClick={() => setPayModalOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00A859] hover:bg-[#00914c] text-white text-xs font-bold shadow-sm cursor-pointer"><Smartphone size={13} /><span className="hidden sm:inline">Pay Dues</span></button>}
-            {role === "admin" && adminTab === "events" && <button type="button" onClick={() => setCreateEventModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Add Event</span></button>}
-            {role === "admin" && adminTab === "gallery" && <button type="button" onClick={() => { setEditingGallery(null); setGalleryForm({ imageUrl: "", albumUrl: "", label: "", category: "Cultural Festival", subLocation: "Mama Ngina Waterfront, Mombasa", isLarge: false, sortOrder: "0" }); setCreateGalleryModal(true); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Add Photo</span></button>}
-            {role === "admin" && adminTab === "leadership" && <button type="button" onClick={() => { setEditingLeader(null); setLeaderForm({ name: "", role: "Chairperson", clan: "Bukusu", phone: "", email: "", avatarUrl: "", bio: "", sortOrder: String(leadershipList.length + 1) }); setCreateLeaderModal(true); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Add Leader</span></button>}
-            {role === "admin" && adminTab === "solidarity" && <button type="button" onClick={() => setAddContribModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Record</span></button>}
-            {role === "admin" && adminTab === "claims" && <button type="button" onClick={() => setCreateAppealModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><PlusCircle size={13} /><span className="hidden sm:inline">New Appeal</span></button>}
+            {role === "leader" && adminTab === "dispatch" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDispatchChannel("both");
+                  setDispatchTargetType("all");
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0D6E38] hover:bg-[#0a4d29] text-white text-xs font-bold shadow-sm cursor-pointer"
+              >
+                <Send size={13} />
+                <span className="hidden sm:inline">New Dispatch</span>
+              </button>
+            )}
+            {role === "leader" && adminTab === "events" && <button type="button" onClick={() => setCreateEventModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Add Event</span></button>}
+            {role === "leader" && adminTab === "gallery" && <button type="button" onClick={() => { setEditingGallery(null); setGalleryForm({ imageUrl: "", albumUrl: "", label: "", category: "Cultural Festival", subLocation: "Mama Ngina Waterfront, Mombasa", isLarge: false, sortOrder: "0" }); setCreateGalleryModal(true); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Add Photo</span></button>}
+            {role === "leader" && adminTab === "leadership" && <button type="button" onClick={() => { setEditingLeader(null); setLeaderForm({ name: "", role: "Chairperson", clan: "Bukusu", phone: "", email: "", avatarUrl: "", bio: "", sortOrder: String(leadershipList.length + 1) }); setCreateLeaderModal(true); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Add Leader</span></button>}
+            {role === "leader" && adminTab === "solidarity" && <button type="button" onClick={() => setAddContribModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><Plus size={13} /><span className="hidden sm:inline">Record</span></button>}
+            {role === "leader" && adminTab === "claims" && <button type="button" onClick={() => setCreateAppealModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#082f1a] text-[#DDA71D] hover:bg-[#0d4d28] text-xs font-bold shadow-sm cursor-pointer"><PlusCircle size={13} /><span className="hidden sm:inline">New Appeal</span></button>}
           </div>
         </header>
 
@@ -664,7 +986,7 @@ export default function DashboardPage() {
                       My Leadership Hierarchy
                     </h3>
                     <p className="text-xs text-emerald-200/80 max-w-xl leading-relaxed">
-                      Your four-tier community representation across Mombasa County: Area, Ward, Subcounty, and County Executive.
+                      Your five-tier community representation across Kenya: Area, Ward, Subcounty, County, and National Council.
                     </p>
                   </div>
                   <button
@@ -776,12 +1098,40 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 4-Tier Leadership Cards Grid */}
+              {/* 5-Tier Leadership Cards Grid */}
               {loadingHierarchy ? (
                 <div className="flex justify-center py-12"><Spinner /></div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* TIER 1: AREA LEADER */}
+                <div className="space-y-4">
+                  {/* TIER 0: NATIONAL LEADERSHIP */}
+                  {hierarchyData?.national && (
+                    <div className="bg-gradient-to-r from-emerald-50 via-amber-50/50 to-white rounded-2xl border-2 border-[#DDA71D]/40 shadow-xs p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-[#0D6E38] text-white uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
+                          <Award size={12} className="text-[#DDA71D]" /> Level 1 · National Leadership Council
+                        </span>
+                        <Link href="/national-leaders" className="text-[11px] font-bold text-[#0D6E38] hover:underline flex items-center gap-1">
+                          <span>View All National Leaders</span> &rarr;
+                        </Link>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                        {hierarchyData.national.leaders?.map((nl: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2.5 bg-white p-3 rounded-xl border border-emerald-100 shadow-2xs">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0D6E38] to-[#082f1a] text-[#DDA71D] flex items-center justify-center font-bold text-xs flex-shrink-0 border border-[#DDA71D]/30">
+                              {nl.name?.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-gray-900 truncate">{nl.name}</div>
+                              <div className="text-[10px] text-[#0D6E38] font-semibold truncate">{nl.role}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* TIER 1: AREA LEADER */}
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 hover:border-[#0D6E38]/30 transition-all relative overflow-hidden">
                     <div className="flex items-center justify-between">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-[#0D6E38] border border-emerald-200/60 uppercase tracking-wide flex items-center gap-1">
@@ -973,7 +1323,8 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
             </div>
           )}
 
@@ -1073,54 +1424,328 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: ANALYTICS */}
-          {role === "admin" && adminTab === "analytics" && (
+          {/* LEADER: OVERVIEW & ANALYTICS */}
+          {role === "leader" && adminTab === "analytics" && (
             <div className="space-y-5 animate-fade-in">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {[
-                  { label: "Members", icon: Users, color: "text-[#0D6E38]", custom: <div className="text-2xl font-extrabold text-[#082f1a]"><NumberTicker value={membersList.length} /></div>, sub: "Registered" },
-                  { label: "Pending Claims", icon: AlertCircle, color: "text-amber-500", custom: <div className="text-2xl font-extrabold text-amber-600">{pendingClaims.length}</div>, sub: `${claimsList.length} total` },
-                  { label: "Treasury", icon: TrendingUp, color: "text-[#DDA71D]", custom: <div className="text-xl font-extrabold text-[#DDA71D]">KES <NumberTicker value={totalReserve} /></div>, sub: `${contributionsList.length} payments` },
-                  { label: "This Month", icon: BarChart3, color: "text-rose-500", custom: <div className="text-xl font-extrabold text-rose-600">KES <NumberTicker value={monthlyCollection} /></div>, sub: "30-day collections" },
-                ].map((card, i) => (
-                  <div key={i} className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                    <div className="flex items-center justify-between mb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{card.label}</span><card.icon size={14} className={card.color} /></div>
-                    {card.custom}
-                    <div className="text-[10px] text-gray-400 mt-1">{card.sub}</div>
+              {/* Scope summary banner */}
+              <div className="bg-gradient-to-r from-[#082f1a] to-[#0D6E38] rounded-2xl p-5 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-emerald-800">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#DDA71D] bg-black/30 px-2.5 py-0.5 rounded-full border border-[#DDA71D]/30">
+                      {isNationalLeader ? "National Governance" : isCountyLeader ? "County Leadership" : isSubcountyAdmin ? "Sub-County Administration" : isWardLeader ? "Ward Leadership" : isAreaLeader ? "Area Leadership" : "Leadership"}
+                    </span>
+                    <span className="text-[10px] text-emerald-300 font-semibold">Active Session</span>
                   </div>
-                ))}
+                  <h3 className="text-lg font-extrabold text-white" style={{ fontFamily: "var(--font-outfit)" }}>
+                    {jurisdictionLabel}
+                  </h3>
+                  <p className="text-xs text-emerald-200/80 mt-1 max-w-xl">
+                    {isAreaLeader
+                      ? "Overseeing registered members, KYC approvals, local communiqués, and direct SMS/email dispatch for your local area."
+                      : isWardLeader
+                      ? "Managing custom areas, area leader appointments, ward membership verification, and ward-wide SMS/email communication."
+                      : isSubcountyAdmin
+                      ? "Overseeing all electoral wards, community areas, member registrations, and sub-county-wide dispatch operations."
+                      : isCountyLeader
+                      ? "Directing all sub-counties, wards, areas, and members across the county with full county-scoped messaging authority."
+                      : "National administration console overseeing all 47 counties, treasury reserves, leadership hierarchy, and nationwide communications."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap sm:flex-col gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setAdminTab("dispatch")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#DDA71D] hover:bg-[#c99516] text-[#082f1a] text-xs font-black shadow-sm transition-all cursor-pointer"
+                  >
+                    <Send size={13} />
+                    <span>Send Dispatch</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminTab("members")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition-all cursor-pointer"
+                  >
+                    <Users size={13} />
+                    <span>Member Registry</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div><h4 className="text-sm font-bold">Monthly M-Pesa Collections vs. Welfare Payouts</h4><p className="text-[10px] text-gray-400">Realtime database inflows</p></div>
-                  <span className="text-[10px] font-bold text-[#0D6E38] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">● Live</span>
-                </div>
-                {monthlyData.length === 0 ? <EmptyState icon={BarChart3} title="No Monthly Data Yet" body="Charts render here when payments and claims are recorded in the database." /> : (
+              {/* Dynamic Role-Aware Metric Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {isAreaLeader ? (
                   <>
-                    <div className="h-44 w-full bg-gradient-to-t from-emerald-50/40 to-white rounded-xl p-3 flex items-end justify-between gap-1.5 border border-gray-100">
-                      {monthlyData.map(bar => {
-                        const maxVal = Math.max(...monthlyData.map(d => Math.max(d.inAmt, d.outAmt)), 1000);
-                        return (
-                          <div key={bar.month} className="flex-1 flex flex-col items-center gap-1">
-                            <div className="w-full flex items-end justify-center gap-1 h-36">
-                              <div style={{ height: `${Math.max(6, (bar.inAmt / maxVal) * 100)}%` }} className="w-5/12 bg-[#0D6E38] rounded-t-md relative group cursor-pointer hover:bg-[#0a4d29] transition-colors"><span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold bg-gray-800 text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-10">KES {bar.inAmt.toLocaleString()}</span></div>
-                              <div style={{ height: `${Math.max(6, (bar.outAmt / maxVal) * 100)}%` }} className="w-5/12 bg-rose-400 rounded-t-md relative group cursor-pointer hover:bg-rose-500 transition-colors"><span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold bg-gray-800 text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-10">KES {bar.outAmt.toLocaleString()}</span></div>
-                            </div>
-                            <span className="text-[9px] text-gray-500 font-medium">{bar.month}</span>
-                          </div>
-                        );
-                      })}
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Area Members</span>
+                        <Users size={14} className="text-[#0D6E38]" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-[#082f1a]">
+                        <NumberTicker value={dispatchRecipients.length || membersList.length} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">In your local area</div>
                     </div>
-                    <div className="flex items-center justify-center gap-5 mt-3 text-xs text-gray-500"><span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-[#0D6E38]" />Collections</span><span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-400" />Claims Paid</span></div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Pending Approvals</span>
+                        <AlertCircle size={14} className="text-amber-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-amber-600">
+                        {membersList.filter(m => m.status !== "Verified").length}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">Awaiting KYC check</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Communiqués</span>
+                        <Megaphone size={14} className="text-purple-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-purple-600">{newsList.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Published updates</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Dispatches</span>
+                        <Send size={14} className="text-blue-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-blue-600">{dispatchLogs.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Broadcasts sent</div>
+                    </div>
+                  </>
+                ) : isWardLeader ? (
+                  <>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Ward Members</span>
+                        <Users size={14} className="text-[#0D6E38]" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-[#082f1a]">
+                        <NumberTicker value={dispatchRecipients.length || membersList.length} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">Registered in ward</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Custom Areas</span>
+                        <Layers size={14} className="text-teal-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-teal-600">{allAreasList.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Areas mapped</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Area Leaders</span>
+                        <Crown size={14} className="text-amber-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-amber-600">
+                        {allAreasList.filter(a => a.leader_member_id).length}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">Appointed leads</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Dispatches</span>
+                        <Send size={14} className="text-blue-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-blue-600">{dispatchLogs.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Ward broadcasts</div>
+                    </div>
+                  </>
+                ) : isSubcountyAdmin ? (
+                  <>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Subcounty Members</span>
+                        <Users size={14} className="text-[#0D6E38]" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-[#082f1a]">
+                        <NumberTicker value={dispatchRecipients.length || membersList.length} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">In subcounty</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Electoral Wards</span>
+                        <Compass size={14} className="text-blue-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-blue-600">
+                        {getWards(currentMember?.subcounty_admin_zone || currentMember?.subcounty || "Nyali").length}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">IEBC wards</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Custom Areas</span>
+                        <Layers size={14} className="text-teal-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-teal-600">{allAreasList.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Community zones</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Dispatches</span>
+                        <Send size={14} className="text-blue-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-blue-600">{dispatchLogs.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Subcounty broadcasts</div>
+                    </div>
+                  </>
+                ) : isCountyLeader ? (
+                  <>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">County Members</span>
+                        <Users size={14} className="text-[#0D6E38]" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-[#082f1a]">
+                        <NumberTicker value={dispatchRecipients.length || membersList.length} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">Across county</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Subcounties</span>
+                        <Building size={14} className="text-blue-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-blue-600">
+                        {getSubcounties(currentMember?.county_leader_county || currentMember?.county || "Mombasa").length}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">Constituencies</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Custom Areas</span>
+                        <Layers size={14} className="text-teal-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-teal-600">{allAreasList.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Community zones</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Dispatches</span>
+                        <Send size={14} className="text-blue-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-blue-600">{dispatchLogs.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">County broadcasts</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Nationwide Members</span>
+                        <Users size={14} className="text-[#0D6E38]" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-[#082f1a]">
+                        <NumberTicker value={membersList.length} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">All 47 Counties</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Pending Claims</span>
+                        <AlertCircle size={14} className="text-amber-500" />
+                      </div>
+                      <div className="text-2xl font-extrabold text-amber-600">{pendingClaims.length}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">{claimsList.length} total claims</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Treasury Reserve</span>
+                        <TrendingUp size={14} className="text-[#DDA71D]" />
+                      </div>
+                      <div className="text-xl font-extrabold text-[#DDA71D]">
+                        KES <NumberTicker value={totalReserve} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">{contributionsList.length} transactions</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">This Month</span>
+                        <BarChart3 size={14} className="text-rose-500" />
+                      </div>
+                      <div className="text-xl font-extrabold text-rose-600">
+                        KES <NumberTicker value={monthlyCollection} />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">30-day collections</div>
+                    </div>
                   </>
                 )}
               </div>
 
+              {/* Monthly Chart (for Super Admin / National Leader / County Leader) */}
+              {(isSuperAdmin || isCountyLeader) && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="text-sm font-bold">Monthly M-Pesa Collections vs. Welfare Payouts</h4>
+                      <p className="text-[10px] text-gray-400">Realtime database inflows</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-[#0D6E38] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                      ● Live
+                    </span>
+                  </div>
+                  {monthlyData.length === 0 ? (
+                    <EmptyState
+                      icon={BarChart3}
+                      title="No Monthly Data Yet"
+                      body="Charts render here when payments and claims are recorded in the database."
+                    />
+                  ) : (
+                    <>
+                      <div className="h-44 w-full bg-gradient-to-t from-emerald-50/40 to-white rounded-xl p-3 flex items-end justify-between gap-1.5 border border-gray-100">
+                        {monthlyData.map((bar) => {
+                          const maxVal = Math.max(...monthlyData.map((d) => Math.max(d.inAmt, d.outAmt)), 1000);
+                          return (
+                            <div key={bar.month} className="flex-1 flex flex-col items-center gap-1">
+                              <div className="w-full flex items-end justify-center gap-1 h-36">
+                                <div
+                                  style={{ height: `${Math.max(6, (bar.inAmt / maxVal) * 100)}%` }}
+                                  className="w-5/12 bg-[#0D6E38] rounded-t-md relative group cursor-pointer hover:bg-[#0a4d29] transition-colors"
+                                >
+                                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold bg-gray-800 text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-10">
+                                    KES {bar.inAmt.toLocaleString()}
+                                  </span>
+                                </div>
+                                <div
+                                  style={{ height: `${Math.max(6, (bar.outAmt / maxVal) * 100)}%` }}
+                                  className="w-5/12 bg-rose-400 rounded-t-md relative group cursor-pointer hover:bg-rose-500 transition-colors"
+                                >
+                                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold bg-gray-800 text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-10">
+                                    KES {bar.outAmt.toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-[9px] text-gray-500 font-medium">{bar.month}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-center gap-5 mt-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded bg-[#0D6E38]" /> Collections
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded bg-rose-400" /> Claims Paid
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Navigation Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {adminNav.slice(1).map(nav => (
-                  <button type="button" key={nav.id} onClick={() => setAdminTab(nav.id as AdminTab)} className="bg-white rounded-xl border border-gray-200 p-3.5 hover:border-[#0D6E38]/40 hover:shadow-sm transition-all text-left group cursor-pointer">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform ${nav.color}`}><nav.icon size={14} /></div>
+                {currentAdminNav.slice(1).map((nav) => (
+                  <button
+                    type="button"
+                    key={nav.id}
+                    onClick={() => setAdminTab(nav.id as AdminTab)}
+                    className="bg-white rounded-xl border border-gray-200 p-3.5 hover:border-[#0D6E38]/40 hover:shadow-sm transition-all text-left group cursor-pointer"
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform ${nav.color}`}>
+                      <nav.icon size={14} />
+                    </div>
                     <div className="text-xs font-bold text-[#18221B]">{nav.label}</div>
                     {nav.badge != null && <div className="text-[10px] text-gray-400 mt-0.5">{nav.badge} items</div>}
                   </button>
@@ -1129,8 +1754,643 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: EVENTS */}
-          {role === "admin" && adminTab === "events" && (
+          {/* LEADER: DISPATCH */}
+          {role === "leader" && adminTab === "dispatch" && (
+            <div className="space-y-5 animate-fade-in">
+              {/* Notification Banner */}
+              {dispatchNotice && (
+                <div
+                  className={`p-4 rounded-xl border text-xs font-bold flex items-center justify-between gap-3 ${
+                    dispatchNotice.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border-rose-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+                    <span>{dispatchNotice.text}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDispatchNotice(null)}
+                    className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-700 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Dispatch Composer Card */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 mb-5 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-wider">
+                        Scoped Dispatch
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-semibold">{jurisdictionLabel}</span>
+                    </div>
+                    <h3 className="text-base font-bold text-[#18221B]">SMS & Email Dispatch Console</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Broadcast notices to members within your jurisdiction via Resend (Email) and Africa&apos;s Talking (SMS).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={fetchDispatchData}
+                      className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 cursor-pointer"
+                      title="Refresh recipients & log"
+                    >
+                      <RefreshCw size={13} className={loadingDispatchData ? "animate-spin" : ""} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  {/* Step 1: Channel Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2">1. Delivery Channel</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {[
+                        {
+                          id: "both" as const,
+                          label: "Both (SMS + Email)",
+                          desc: "Maximum reach. Sends SMS to phones & HTML email to inboxes.",
+                          icon: Radio,
+                          badge: "Recommended",
+                        },
+                        {
+                          id: "sms" as const,
+                          label: "SMS Only",
+                          desc: "Direct text to Kenyan mobiles (+254) via Africa's Talking.",
+                          icon: Smartphone,
+                          badge: "160 chars / unit",
+                        },
+                        {
+                          id: "email" as const,
+                          label: "Email Only",
+                          desc: "Rich transactional email delivered via Resend API.",
+                          icon: Mail,
+                          badge: "Zero SMS cost",
+                        },
+                      ].map((ch) => (
+                        <button
+                          type="button"
+                          key={ch.id}
+                          onClick={() => setDispatchChannel(ch.id)}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative ${
+                            dispatchChannel === ch.id
+                              ? "border-[#0D6E38] bg-emerald-50/50 ring-2 ring-[#0D6E38]/20"
+                              : "border-gray-200 hover:border-gray-300 bg-white"
+                          }`}
+                        >
+                          {ch.badge && (
+                            <span className="absolute top-2.5 right-2.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#DDA71D]/20 text-[#082f1a]">
+                              {ch.badge}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <ch.icon
+                              size={15}
+                              className={dispatchChannel === ch.id ? "text-[#0D6E38]" : "text-gray-400"}
+                            />
+                            <span className="text-xs font-bold text-gray-900">{ch.label}</span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 leading-relaxed">{ch.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Step 2: Recipient Targeting */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-gray-700">2. Recipient Targeting (Scoped)</label>
+                      <span className="text-[10px] font-bold text-[#0D6E38] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                        {dispatchRecipients.length} members eligible in your jurisdiction
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDispatchTargetType("all");
+                          setSelectedRecipientIds([]);
+                        }}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                          dispatchTargetType === "all"
+                            ? "border-[#0D6E38] bg-emerald-50/50 ring-2 ring-[#0D6E38]/20"
+                            : "border-gray-200 hover:border-gray-300 bg-white"
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                          <Users size={14} className="text-[#0D6E38]" />
+                          <span>All Members in Jurisdiction</span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          Broadcasts to all {dispatchRecipients.length} members under your verified scope.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDispatchTargetType("selected")}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                          dispatchTargetType === "selected"
+                            ? "border-[#0D6E38] bg-emerald-50/50 ring-2 ring-[#0D6E38]/20"
+                            : "border-gray-200 hover:border-gray-300 bg-white"
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                          <CheckCheck size={14} className="text-blue-600" />
+                          <span>Selected Members ({selectedRecipientIds.length} chosen)</span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          Pick individual recipients manually from the searchable list below.
+                        </p>
+                      </button>
+                    </div>
+
+                    {/* Member picker if targetType === "selected" */}
+                    {dispatchTargetType === "selected" && (
+                      <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
+                          <input
+                            type="text"
+                            value={recipientSearch}
+                            onChange={(e) => setRecipientSearch(e.target.value)}
+                            placeholder="Filter by name, phone, or ward..."
+                            className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-1 focus:ring-[#0D6E38] sm:w-64"
+                          />
+                          <div className="flex gap-2 text-[10px] font-bold">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRecipientIds(dispatchRecipients.map((r) => r.id))}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 cursor-pointer"
+                            >
+                              Select All ({dispatchRecipients.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRecipientIds([])}
+                              className="px-2.5 py-1 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 bg-white rounded-lg border border-gray-200">
+                          {dispatchRecipients
+                            .filter((r) => {
+                              if (!recipientSearch.trim()) return true;
+                              const q = recipientSearch.toLowerCase();
+                              return (
+                                r.full_name?.toLowerCase().includes(q) ||
+                                r.phone?.toLowerCase().includes(q) ||
+                                r.ward?.toLowerCase().includes(q) ||
+                                r.subcounty?.toLowerCase().includes(q)
+                              );
+                            })
+                            .map((r) => {
+                              const checked = selectedRecipientIds.includes(r.id);
+                              return (
+                                <label
+                                  key={r.id}
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-gray-50 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedRecipientIds([...selectedRecipientIds, r.id]);
+                                      else setSelectedRecipientIds(selectedRecipientIds.filter((id) => id !== r.id));
+                                    }}
+                                    className="rounded border-gray-300 text-[#0D6E38] focus:ring-[#0D6E38]"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <span className="font-bold text-gray-900">{r.full_name}</span>
+                                    <span className="text-[10px] text-gray-500 ml-2 font-mono">{r.phone}</span>
+                                    {r.ward && (
+                                      <span className="text-[9px] text-[#0D6E38] ml-2 font-semibold">
+                                        ({r.ward} Ward)
+                                      </span>
+                                    )}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 3: Message Content */}
+                  <div className="space-y-3">
+                    <label className="block text-xs font-bold text-gray-700">3. Message Content</label>
+
+                    {(dispatchChannel === "email" || dispatchChannel === "both") && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                          Email Subject Line <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={dispatchSubject}
+                          onChange={(e) => setDispatchSubject(e.target.value)}
+                          placeholder="e.g. Mulembe18 Urgent Welfare Notice / Gathering Briefing"
+                          className={inputCls}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-semibold text-gray-600">
+                          Message Body <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="text-[10px] font-mono">
+                          <span
+                            className={
+                              dispatchMessage.length > 320
+                                ? "text-amber-600 font-bold"
+                                : dispatchMessage.length > 0
+                                ? "text-emerald-700 font-bold"
+                                : "text-gray-400"
+                            }
+                          >
+                            {dispatchMessage.length} characters
+                          </span>
+                          <span className="text-gray-400 ml-1">
+                            ({Math.ceil(dispatchMessage.length / 160) || 1} SMS unit
+                            {(Math.ceil(dispatchMessage.length / 160) || 1) > 1 ? "s" : ""} / 160 chars)
+                          </span>
+                        </div>
+                      </div>
+                      <textarea
+                        required
+                        rows={4}
+                        value={dispatchMessage}
+                        onChange={(e) => setDispatchMessage(e.target.value)}
+                        placeholder="Write your dispatch notice here. For SMS, keep it concise (under 160 chars per segment). For Email, line breaks are preserved."
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-gray-100">
+                    <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-[#0D6E38]" />
+                      <span>
+                        Sender: <strong>{currentMember?.full_name || user?.fullName}</strong> ({userRole})
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!dispatchMessage.trim()) return alert("Message body cannot be empty.");
+                        if ((dispatchChannel === "email" || dispatchChannel === "both") && !dispatchSubject.trim()) {
+                          return alert("Email subject line is required.");
+                        }
+                        if (dispatchTargetType === "selected" && selectedRecipientIds.length === 0) {
+                          return alert("Please select at least one recipient member.");
+                        }
+                        setDispatchConfirmModalOpen(true);
+                      }}
+                      className={btnPrimary + " px-6 py-2.5"}
+                    >
+                      <Send size={13} />
+                      <span>Review & Broadcast Dispatch</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery History Log Card */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-5">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-[#18221B]">Real-Time Delivery Log</h4>
+                    <p className="text-[11px] text-gray-500">
+                      Audit trail of sent, pending, and simulated messages logged in the database.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {dispatchLogs.length} total entries
+                  </span>
+                </div>
+
+                {loadingDispatchData ? (
+                  <div className="py-8 flex justify-center">
+                    <Spinner />
+                  </div>
+                ) : dispatchLogs.length === 0 ? (
+                  <EmptyState
+                    icon={Send}
+                    title="No Dispatches Sent Yet"
+                    body="When you send SMS or Email notifications, each recipient's delivery status will be tracked here in real-time."
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-wide">
+                          <th className="py-2.5 px-3 text-left">Date / Time</th>
+                          <th className="py-2.5 px-3 text-left">Recipient</th>
+                          <th className="py-2.5 px-3 text-left">Channel</th>
+                          <th className="py-2.5 px-3 text-left">Subject / Body</th>
+                          <th className="py-2.5 px-3 text-center">Status</th>
+                          <th className="py-2.5 px-3 text-left">Provider Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {dispatchLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-gray-50/70">
+                            <td className="py-2.5 px-3 text-[11px] text-gray-500 whitespace-nowrap font-mono">
+                              {new Date(log.created_at).toLocaleString("en-KE", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-gray-900">{log.recipient_name}</div>
+                              <div className="text-[10px] text-gray-400 font-mono">
+                                {log.recipient_phone || log.recipient_email}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  log.channel === "sms"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : log.channel === "email"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-purple-100 text-purple-800"
+                                }`}
+                              >
+                                {log.channel === "sms" ? <Smartphone size={10} /> : <Mail size={10} />}
+                                {log.channel.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 max-w-xs truncate text-gray-700">
+                              {log.subject && <span className="font-semibold text-gray-900 mr-1">[{log.subject}]</span>}
+                              <span className="text-[11px] text-gray-500">{log.message}</span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  log.status === "Sent"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : log.status === "Pending"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-rose-100 text-rose-800"
+                                }`}
+                              >
+                                {log.status === "Sent" ? (
+                                  <CheckCircle size={10} />
+                                ) : log.status === "Pending" ? (
+                                  <Clock size={10} />
+                                ) : (
+                                  <XCircle size={10} />
+                                )}
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-[10px] text-gray-400 max-w-xs truncate font-mono">
+                              {log.error_reason || "Delivered successfully"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* LEADER: AREAS MANAGEMENT */}
+          {role === "leader" && adminTab === "areas" && (
+            <div className="space-y-5 animate-fade-in">
+              {/* Add New Area Card */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-5">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-[#18221B]">Create Custom Community Area</h3>
+                    <p className="text-[11px] text-gray-500">
+                      Areas are custom sub-divisions beneath official IEBC electoral wards to organize local member communities.
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleCreateArea} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      Area Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newAreaName}
+                      onChange={(e) => setNewAreaName(e.target.value)}
+                      placeholder="e.g. Kwa Bulo Central / Old Town Shore"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      County <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={newAreaCounty}
+                      onChange={(e) => {
+                        const c = e.target.value;
+                        setNewAreaCounty(c);
+                        const subs = getSubcounties(c);
+                        if (subs.length > 0) {
+                          setNewAreaSubcounty(subs[0]);
+                          const wards = getWards(subs[0], c);
+                          if (wards.length > 0) setNewAreaWard(wards[0]);
+                        }
+                      }}
+                      className={inputCls}
+                    >
+                      {KENYA_COUNTIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c} County
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      Subcounty <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={newAreaSubcounty}
+                      onChange={(e) => {
+                        const s = e.target.value;
+                        setNewAreaSubcounty(s);
+                        const wards = getWards(s, newAreaCounty);
+                        if (wards.length > 0) setNewAreaWard(wards[0]);
+                      }}
+                      className={inputCls}
+                    >
+                      {getSubcounties(newAreaCounty).map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      Ward Jurisdiction <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={isWardLeader ? (currentMember?.ward_leader_ward || currentMember?.ward) : newAreaWard}
+                      disabled={isWardLeader}
+                      onChange={(e) => setNewAreaWard(e.target.value)}
+                      className={inputCls}
+                      required
+                    >
+                      {(isWardLeader
+                        ? [currentMember?.ward_leader_ward || currentMember?.ward || "Assigned Ward"]
+                        : getWards(newAreaSubcounty, newAreaCounty)
+                      ).map((w) => (
+                        <option key={w} value={w}>
+                          {w} Ward
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">Contact Phone / Info</label>
+                    <input
+                      type="text"
+                      value={newAreaContact}
+                      onChange={(e) => setNewAreaContact(e.target.value)}
+                      placeholder="e.g. 0712 345 678"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">Brief Description</label>
+                    <input
+                      type="text"
+                      value={newAreaDesc}
+                      onChange={(e) => setNewAreaDesc(e.target.value)}
+                      placeholder="e.g. Bordering Nyali bridge to the market"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 lg:col-span-3 flex justify-end pt-1">
+                    <button type="submit" disabled={creatingArea} className={btnPrimary}>
+                      <Plus size={13} />
+                      <span>{creatingArea ? "Registering Area..." : "Save Custom Area"}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Areas Table Card */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-5">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-[#18221B]">Community Areas in Jurisdiction</h4>
+                    <p className="text-[11px] text-gray-500">{allAreasList.length} total areas registered</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchAllAreas}
+                    className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 cursor-pointer"
+                    title="Refresh"
+                  >
+                    <RefreshCw size={13} className={loadingAreasList ? "animate-spin" : ""} />
+                  </button>
+                </div>
+
+                {loadingAreasList ? (
+                  <div className="py-8 flex justify-center">
+                    <Spinner />
+                  </div>
+                ) : allAreasList.length === 0 ? (
+                  <EmptyState
+                    icon={Layers}
+                    title="No Areas Registered Yet"
+                    body="Create the first custom community area under your ward using the form above."
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-wide">
+                          <th className="py-2.5 px-3 text-left">Area ID & Name</th>
+                          <th className="py-2.5 px-3 text-left">Ward</th>
+                          <th className="py-2.5 px-3 text-left">Subcounty</th>
+                          <th className="py-2.5 px-3 text-left">Area Leader</th>
+                          <th className="py-2.5 px-3 text-center">Members</th>
+                          <th className="py-2.5 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {allAreasList.map((area) => (
+                          <tr key={area.id} className="hover:bg-gray-50/70">
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-gray-900">{area.name}</div>
+                              <div className="text-[10px] text-gray-400 font-mono">ID: #{area.id}</div>
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-emerald-800">{area.ward} Ward</td>
+                            <td className="py-3 px-3 text-gray-600">{area.subcounty}</td>
+                            <td className="py-3 px-3">
+                              {area.leader_name ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800">
+                                  <MapPin size={10} /> {area.leader_name}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-gray-400 italic">Unassigned</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold text-gray-800">
+                              {area.member_count ?? 0}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAssignLeaderModalArea(area);
+                                  setSelectedAreaLeaderId("");
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 text-[10px] font-bold cursor-pointer"
+                              >
+                                {area.leader_name ? "Change Leader" : "Assign Leader"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* LEADER: EVENTS */}
+          {role === "leader" && adminTab === "events" && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm animate-fade-in">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div><h3 className="text-sm font-bold">Community Calendar & Events Manager</h3><p className="text-[11px] text-gray-400">Schedule, feature, and manage community gatherings.</p></div>
@@ -1171,8 +2431,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: CLAIMS */}
-          {role === "admin" && adminTab === "claims" && (
+          {/* LEADER: CLAIMS */}
+          {role === "leader" && adminTab === "claims" && (
             <div className="space-y-5 animate-fade-in">
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
                 <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1239,13 +2499,13 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: MEMBER REGISTRY */}
-          {role === "admin" && adminTab === "members" && (
+          {/* LEADER: MEMBER REGISTRY */}
+          {role === "leader" && adminTab === "members" && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm animate-fade-in">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold">Member Registry & Role Management</h3>
-                  <p className="text-[11px] text-gray-400">{membersList.length} registered · Live KYC & Subcounty Admin assignment</p>
+                  <h3 className="text-sm font-bold">Member Registry & Approvals</h3>
+                  <p className="text-[11px] text-gray-400">{membersList.length} registered · Review KYC and approve members under your jurisdiction</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -1266,6 +2526,7 @@ export default function DashboardPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-wide">
                           <th className="py-2.5 px-3 text-left">Member</th>
+                          <th className="py-2.5 px-3 text-left">County</th>
                           <th className="py-2.5 px-3 text-left">Sub-Clan</th>
                           <th className="py-2.5 px-3 text-left">Zone / Subcounty</th>
                           <th className="py-2.5 px-3 text-left">Role / Level</th>
@@ -1278,16 +2539,33 @@ export default function DashboardPage() {
                         {membersList.map(m => (
                           <tr key={m.id} className="hover:bg-gray-50/70">
                             <td className="py-3 px-3"><div className="font-bold text-gray-900">{m.full_name}</div><div className="font-mono text-[9px] text-gray-400">{m.membership_no || `MLB-${m.id}`}</div></td>
+                            <td className="py-3 px-3 font-semibold text-emerald-800">{m.county || "Mombasa"}</td>
                             <td className="py-3 px-3 text-gray-600">{m.sub_clan}</td>
                             <td className="py-3 px-3 text-gray-500">{m.residential_zone}</td>
                             <td className="py-3 px-3">
-                              {m.role === "super_admin" ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700">
+                              {m.role === "national_leader" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-200">
+                                  <Award size={10} className="text-amber-600" /> National Leader
+                                </span>
+                              ) : m.role === "super_admin" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
                                   <Crown size={10} /> Super Admin
+                                </span>
+                              ) : m.role === "county_leader" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                  <Building size={10} /> {m.county_leader_county || m.county || "County"} Leader
                                 </span>
                               ) : m.role === "subcounty_admin" ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700">
                                   <Building size={10} /> {m.subcounty_admin_zone || "Subcounty"} Admin
+                                </span>
+                              ) : m.role === "ward_leader" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  <Compass size={10} /> {m.ward_leader_ward || m.ward || "Ward"} Leader
+                                </span>
+                              ) : m.role === "area_leader" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-100 text-teal-800">
+                                  <MapPin size={10} /> Area Leader
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
@@ -1298,23 +2576,47 @@ export default function DashboardPage() {
                             <td className="py-3 px-3 font-mono text-gray-500">{m.phone}</td>
                             <td className="py-3 px-3 text-center"><Badge status={m.status || "Verified"} /></td>
                             <td className="py-3 px-3 text-right whitespace-nowrap">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRoleModalMember(m);
-                                  setAssignedRole(m.role || "member");
-                                  const defaultSub = m.subcounty || m.subcounty_admin_zone || m.residential_zone || "Nyali";
-                                  setAssignedZone(defaultSub);
-                                  const wards = getWards(defaultSub);
-                                  setAssignedWard(m.ward_leader_ward || m.ward || (wards[0] || ""));
-                                  setAssignedAreaId(m.area_id ? String(m.area_id) : "");
-                                }}
-                                className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold mr-1 cursor-pointer"
-                              >
-                                Role
-                              </button>
-                              {m.status !== "Verified" && <button type="button" onClick={() => handleVerifyMember(m.id)} className="px-2 py-0.5 rounded-lg bg-emerald-50 text-[#0D6E38] hover:bg-emerald-100 text-[10px] font-bold mr-1 cursor-pointer">Verify</button>}
-                              <button type="button" onClick={() => handleDeleteMember(m.id)} className="p-1 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"><Trash2 size={12} /></button>
+                              {/* 1-Click Approve / Verify */}
+                              {m.status !== "Verified" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateMemberStatus(m.id, "Verified")}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold mr-1 cursor-pointer shadow-xs inline-flex items-center gap-1"
+                                >
+                                  <Check size={10} />
+                                  <span>Approve</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateMemberStatus(m.id, "Pending")}
+                                  className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-medium mr-1 cursor-pointer"
+                                  title="Revoke verified status"
+                                >
+                                  Revoke
+                                </button>
+                              )}
+                              {(isSuperAdmin || isCountyLeader) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRoleModalMember(m);
+                                    setAssignedRole(m.role || "member");
+                                    setAssignedCounty(m.county_leader_county || m.county || "Mombasa");
+                                    const defaultSub = m.subcounty || m.subcounty_admin_zone || m.residential_zone || "Nyali";
+                                    setAssignedZone(defaultSub);
+                                    const wards = getWards(defaultSub, m.county || "Mombasa");
+                                    setAssignedWard(m.ward_leader_ward || m.ward || (wards[0] || ""));
+                                    setAssignedAreaId(m.area_id ? String(m.area_id) : "");
+                                  }}
+                                  className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold mr-1 cursor-pointer"
+                                >
+                                  Role
+                                </button>
+                              )}
+                              {isSuperAdmin && (
+                                <button type="button" onClick={() => handleDeleteMember(m.id)} className="p-1 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"><Trash2 size={12} /></button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1326,8 +2628,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: SOLIDARITY FUND */}
-          {role === "admin" && adminTab === "solidarity" && (
+          {/* LEADER: SOLIDARITY FUND */}
+          {role === "leader" && adminTab === "solidarity" && (
             <div className="space-y-5 animate-fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[{ label: "Total Reserve", v: totalReserve, prefix: "KES ", c: "text-[#DDA71D]", sub: "Liquid welfare fund" }, { label: "This Month", v: monthlyCollection, prefix: "KES ", c: "text-[#0D6E38]", sub: "30-day collections" }, { label: "Transactions", v: contributionsList.length, prefix: "", c: "text-[#18221B]", sub: "Recorded in DB" }].map((s, i) => (
@@ -1368,8 +2670,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: BROADCAST */}
-          {role === "admin" && adminTab === "broadcast" && (
+          {/* LEADER: BROADCAST */}
+          {role === "leader" && adminTab === "broadcast" && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-fade-in">
               <div className="lg:col-span-5">
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-5 sticky top-20">
@@ -1439,8 +2741,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: GALLERY */}
-          {role === "admin" && adminTab === "gallery" && (
+          {/* LEADER: GALLERY */}
+          {role === "leader" && adminTab === "gallery" && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm animate-fade-in">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div><h3 className="text-sm font-bold">Photo Gallery & Google Albums Manager</h3><p className="text-[11px] text-gray-400">Add direct photo links or Google Photos album URLs</p></div>
@@ -1475,8 +2777,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ADMIN: LEADERSHIP */}
-          {role === "admin" && adminTab === "leadership" && (
+          {/* LEADER: LEADERSHIP */}
+          {role === "leader" && adminTab === "leadership" && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm animate-fade-in">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div><h3 className="text-sm font-bold">Executive Leadership & Committee</h3><p className="text-[11px] text-gray-400">{leadershipList.length} members · Displayed on public leadership page</p></div>
@@ -1775,9 +3077,34 @@ export default function DashboardPage() {
                   <option value="area_leader">Area Leader</option>
                   <option value="ward_leader">Ward Leader</option>
                   <option value="subcounty_admin">Subcounty Admin</option>
+                  <option value="county_leader">County Leader</option>
                   <option value="super_admin">Super Administrator</option>
+                  <option value="national_leader">National Leader (All 47 Counties)</option>
                 </select>
               </div>
+
+              {assignedRole === "county_leader" && (
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1.5">
+                    County Jurisdiction <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={assignedCounty}
+                    onChange={(e) => setAssignedCounty(e.target.value)}
+                    className={inputCls}
+                    required
+                  >
+                    {KENYA_COUNTIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c} County
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    This leader will oversee all subcounties, wards, areas, and members within this county.
+                  </p>
+                </div>
+              )}
 
               {assignedRole === "ward_leader" && (
                 <div className="space-y-3">
@@ -1878,6 +3205,160 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dispatch Preview & Confirm Modal */}
+      {dispatchConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white max-w-lg w-full rounded-2xl p-5 sm:p-6 shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <h4 className="font-bold text-sm text-[#18221B]">Confirm Broadcast Dispatch</h4>
+                <p className="text-[10px] text-gray-400">Review recipient count and channel before sending.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDispatchConfirmModalOpen(false)}
+                className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-xl border border-gray-100 text-[11px]">
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Channel</span>
+                  <span className="font-bold uppercase text-[#0D6E38]">{dispatchChannel}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Target Recipients</span>
+                  <span className="font-bold text-gray-800">
+                    {dispatchTargetType === "all" ? dispatchRecipients.length : selectedRecipientIds.length} members
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Sender Authority</span>
+                  <span className="font-bold text-gray-800">{userRole}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Jurisdiction</span>
+                  <span className="font-bold text-gray-800 truncate block">{jurisdictionLabel}</span>
+                </div>
+              </div>
+
+              {(dispatchChannel === "sms" || dispatchChannel === "both") && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
+                  <strong>SMS Cost & Units:</strong> {Math.ceil(dispatchMessage.length / 160) || 1} SMS unit per member ×{" "}
+                  {dispatchTargetType === "all" ? dispatchRecipients.length : selectedRecipientIds.length} recipients ={" "}
+                  <strong>
+                    {(Math.ceil(dispatchMessage.length / 160) || 1) *
+                      (dispatchTargetType === "all" ? dispatchRecipients.length : selectedRecipientIds.length)}{" "}
+                    total SMS units
+                  </strong>
+                  .
+                </div>
+              )}
+
+              {(dispatchChannel === "email" || dispatchChannel === "both") && dispatchSubject && (
+                <div>
+                  <span className="text-gray-400 block text-[10px] mb-0.5">Subject</span>
+                  <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-200 font-semibold text-gray-800 text-xs">
+                    {dispatchSubject}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <span className="text-gray-400 block text-[10px] mb-0.5">Message Content</span>
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-gray-700 whitespace-pre-wrap leading-relaxed text-xs">
+                  {dispatchMessage}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setDispatchConfirmModalOpen(false)}
+                  disabled={dispatchSubmitting}
+                  className={btnSecondary + " flex-1 justify-center"}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendDispatch}
+                  disabled={dispatchSubmitting}
+                  className={btnPrimary + " flex-1 justify-center"}
+                >
+                  {dispatchSubmitting ? "Broadcasting..." : "Confirm & Send"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Area Leader Modal */}
+      {assignLeaderModalArea && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white max-w-sm w-full rounded-2xl p-5 shadow-2xl border border-gray-200">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <h4 className="font-bold text-sm text-[#18221B]">Assign Area Leader</h4>
+                <p className="text-[10px] text-gray-400">{assignLeaderModalArea.name} (#{assignLeaderModalArea.id})</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignLeaderModalArea(null)}
+                className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">Select Member from Ward</label>
+                <select
+                  value={selectedAreaLeaderId}
+                  onChange={(e) => setSelectedAreaLeaderId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">-- Choose active member --</option>
+                  {membersList
+                    .filter((m) => !assignLeaderModalArea.ward || m.ward?.toLowerCase() === assignLeaderModalArea.ward.toLowerCase() || !m.ward)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name} ({m.phone}) - {m.ward || "No ward"}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Assigning will update the member&apos;s role to Area Leader for this area.
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignLeaderModalArea(null)}
+                  className={btnSecondary + " flex-1 justify-center"}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedAreaLeaderId || assigningAreaLeader}
+                  onClick={() => handleAssignAreaLeader(assignLeaderModalArea.id, Number(selectedAreaLeaderId))}
+                  className={btnPrimary + " flex-1 justify-center"}
+                >
+                  {assigningAreaLeader ? "Assigning..." : "Confirm Leader"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

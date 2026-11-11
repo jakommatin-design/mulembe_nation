@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import kenyaHierarchyData from "./data/kenya-hierarchy.json";
 
 let pool: mysql.Pool | null = null;
 
@@ -159,10 +160,10 @@ export async function initDatabaseSchema() {
         INSERT INTO news_articles (title, category, summary, content, date, read_time, image_url, author)
         VALUES
         (
-          'Mulembe18 Coastal Executive Committee Elections 2025–2027 Concluded',
+          'Mulembe18 Kenya Executive Committee Elections 2025–2027 Concluded',
           'Announcements',
-          'The General Assembly has formally ratified the newly elected governing council representing all 18 Luhya sub-communities across Mombasa County.',
-          'Following transparent voting held across Mombasa, Nyali, and Likoni sub-branches, the Mulembe18 Electoral Board is pleased to announce the ratified leadership council for the 2025–2027 term. The governing priority centers on expanding the emergency medical evacuation fund and maritime youth training.',
+          'The General Assembly has formally ratified the newly elected governing council representing all 18 Luhya sub-communities across Kenya.',
+          'Following transparent voting held across national sub-branches, the Mulembe18 Electoral Board is pleased to announce the ratified leadership council for the 2025–2027 term. The governing priority centers on expanding the emergency medical evacuation fund and youth mentorship.',
           '18 April 2025',
           '3 min read',
           '/images/coastal-portal.png',
@@ -171,8 +172,8 @@ export async function initDatabaseSchema() {
         (
           'Official Program Released for Annual Luhya Cultural Festival at Mama Ngina',
           'Culture & Festivals',
-          'Over 20 traditional Isukuti drum troupes, legendary bullfighting storytellers, and master chefs prepare for Mombasa premier cultural spectacle.',
-          'The Organizing Committee for the Annual Mombasa Luhya Cultural Day has officially unveiled the schedule of events at Mama Ngina Waterfront Park. Highlights include an inter-clan traditional dance showcase and authentic culinary exhibitions featuring Ingokho and Obusuma bwo Bule.',
+          'Over 20 traditional Isukuti drum troupes, legendary bullfighting storytellers, and master chefs prepare for Kenya premier cultural spectacle.',
+          'The Organizing Committee for the Annual Mulembe Luhya Cultural Day has officially unveiled the schedule of events at Mama Ngina Waterfront Park. Highlights include an inter-clan traditional dance showcase and authentic culinary exhibitions featuring Ingokho and Obusuma bwo Bule.',
           '14 April 2025',
           '4 min read',
           '/images/events-cultural.png',
@@ -225,12 +226,93 @@ export async function initDatabaseSchema() {
 
     // Ensure Location & Leadership hierarchy columns exist on members
     try { await db.execute("ALTER TABLE members ADD COLUMN county VARCHAR(100) DEFAULT 'Mombasa';"); } catch {}
+    // Migration: Existing members should get 'Mombasa' as their county
+    try {
+      await db.execute("UPDATE members SET county = 'Mombasa' WHERE county IS NULL OR county = '' OR county = 'undefined';");
+    } catch {}
     try { await db.execute("ALTER TABLE members ADD COLUMN subcounty VARCHAR(100) NULL;"); } catch {}
     try { await db.execute("ALTER TABLE members ADD COLUMN ward VARCHAR(100) NULL;"); } catch {}
     try { await db.execute("ALTER TABLE members ADD COLUMN area_id INT NULL;"); } catch {}
     try { await db.execute("ALTER TABLE members ADD COLUMN area_name VARCHAR(150) NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN county_leader_county VARCHAR(100) NULL;"); } catch {}
+    try { await db.execute("ALTER TABLE members ADD COLUMN subcounty_admin_zone VARCHAR(100) NULL;"); } catch {}
     try { await db.execute("ALTER TABLE members ADD COLUMN ward_leader_ward VARCHAR(100) NULL;"); } catch {}
     try { await db.execute("ALTER TABLE members ADD COLUMN area_leader_area_id INT NULL;"); } catch {}
+
+    // Counties Table (Official 47 Kenyan Counties - IEBC Delimitation)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS counties (
+        id INT PRIMARY KEY,
+        code INT NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        capital VARCHAR(100) NULL
+      );
+    `);
+
+    // Subcounties Table (Official 290 Kenyan Constituencies / Sub-counties)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS subcounties (
+        id INT PRIMARY KEY,
+        code INT NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        county_code INT NOT NULL,
+        county_name VARCHAR(100) NOT NULL,
+        INDEX idx_county_name (county_name)
+      );
+    `);
+
+    // Wards Table (Official 1,450 Kenyan Electoral Wards)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS wards (
+        id INT PRIMARY KEY,
+        code INT NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        constituency_code INT NOT NULL,
+        county_code INT NOT NULL,
+        county_name VARCHAR(100) NOT NULL,
+        subcounty_name VARCHAR(100) NOT NULL,
+        INDEX idx_subcounty_lookup (county_name, subcounty_name)
+      );
+    `);
+
+    // Dispatch Logs Table (Comprehensive role-scoped message logs for SMS & Email)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS dispatch_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        batch_id VARCHAR(64) NOT NULL,
+        sender_id INT NOT NULL,
+        sender_name VARCHAR(191) NOT NULL,
+        sender_role VARCHAR(50) NOT NULL,
+        sender_scope VARCHAR(150) NOT NULL,
+        channel VARCHAR(20) NOT NULL,
+        recipient_id INT NULL,
+        recipient_name VARCHAR(191) NOT NULL,
+        recipient_phone VARCHAR(60) NULL,
+        recipient_email VARCHAR(191) NULL,
+        recipient_scope VARCHAR(150) NULL,
+        subject VARCHAR(255) NULL,
+        message TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'Sent',
+        error_message TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_sender (sender_id),
+        INDEX idx_batch (batch_id),
+        INDEX idx_status (status)
+      );
+    `);
+
+    // Notifications Table (SMS & Email audit ledger)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        recipient VARCHAR(191) NOT NULL,
+        channel VARCHAR(20) NOT NULL,
+        subject VARCHAR(255) NULL,
+        message TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'Sent',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // 8. Areas Table (Created and managed by Ward Leaders)
     await db.execute(`
@@ -311,6 +393,51 @@ export async function initDatabaseSchema() {
         ('James Ochieng', 'Organizing Sec.', 'Wanga', 5),
         ('Rose Nandwa', 'Welfare Officer', 'Marachi', 6)
       `);
+    }
+
+    // 10. Seed Official Kenya Counties, Sub-Counties and Wards (IEBC delimitation)
+    try {
+      const [subRows]: any = await db.execute("SELECT COUNT(*) AS count FROM subcounties");
+      if (subRows?.[0]?.count === 0) {
+        console.log("[TiDB / MySQL] Seeding official Kenya 47 Counties, 290 Subcounties, and 1,450 Wards...");
+        const countyRows: any[] = [];
+        const subcountyRows: any[] = [];
+        const wardRows: any[] = [];
+        let subGlobalId = 1;
+        let wardGlobalId = 1;
+
+        for (const c of kenyaHierarchyData as any[]) {
+          countyRows.push([c.code, c.name]);
+          for (const s of (c.subcounties || [])) {
+            const scId = subGlobalId++;
+            subcountyRows.push([scId, s.code, s.name, c.code, c.name]);
+            for (const w of (s.wards || [])) {
+              const wId = wardGlobalId++;
+              const wardName = typeof w === "string" ? w : w.name;
+              const wardCode = typeof w === "string" ? wId : (w.code || wId);
+              wardRows.push([wId, scId, wardName, s.code, c.code, c.name, s.name]);
+            }
+          }
+        }
+
+        for (let i = 0; i < subcountyRows.length; i += 100) {
+          const chunk = subcountyRows.slice(i, i + 100);
+          const ph = chunk.map(() => "(?, ?, ?, ?, ?)").join(", ");
+          await db.execute(`INSERT IGNORE INTO subcounties (id, code, name, county_code, county_name) VALUES ${ph}`, chunk.flat());
+        }
+
+        for (let i = 0; i < wardRows.length; i += 200) {
+          const chunk = wardRows.slice(i, i + 200);
+          const ph = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ");
+          await db.execute(
+            `INSERT IGNORE INTO wards (id, sub_county_id, name, constituency_code, county_code, county_name, subcounty_name) VALUES ${ph}`,
+            chunk.flat()
+          );
+        }
+        console.log("[TiDB / MySQL] Successfully seeded all official Kenya counties, subcounties, and wards.");
+      }
+    } catch (seedErr: any) {
+      console.warn("[TiDB / MySQL] Locations seeding notice:", seedErr?.message);
     }
 
     console.log("[TiDB / MySQL] Schema initialized successfully with all dynamic tables.");

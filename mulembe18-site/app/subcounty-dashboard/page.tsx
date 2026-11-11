@@ -202,7 +202,11 @@ export default function SubcountyDashboardPage() {
                     Subcounty Leaders Portal
                   </span>
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-emerald-100 text-[#0D6E38]">
-                    {callerRole === "super_admin" ? (
+                    {callerRole === "national_leader" ? (
+                      <>
+                        <Crown size={10} className="text-amber-600" /> National Leader
+                      </>
+                    ) : callerRole === "super_admin" ? (
                       <>
                         <Crown size={10} /> Super Admin
                       </>
@@ -248,8 +252,8 @@ export default function SubcountyDashboardPage() {
               {assignedSubcounty ? `${assignedSubcounty} Subcounty Registry` : "Subcounty Member Registry"}
             </h1>
             <p className="text-xs sm:text-sm text-emerald-100/80 leading-relaxed">
-              {callerRole === "super_admin"
-                ? "Super Administrator Access: You have unrestricted oversight over all Mombasa subcounties and can audit or assign local leadership."
+              {callerRole === "super_admin" || callerRole === "national_leader"
+                ? "Top Administrator Access: You have unrestricted oversight across all counties and subcounties, with authority to audit or assign local leadership."
                 : `Secured Administrative Scope: You are authorized to review and verify members registered within the ${assignedSubcounty} jurisdiction. Other subcounties are protected by server-side role partitioning.`}
             </p>
           </div>

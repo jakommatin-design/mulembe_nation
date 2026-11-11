@@ -4,7 +4,7 @@ import { MapPin, Phone, Mail, Clock, CheckCircle2 } from "lucide-react";
 
 const quickLinks = [
   { href: "#about", label: "About Mulembe18" },
-  { href: "/member-directory", label: "Member Directory" },
+  { href: "/national-leaders", label: "National Leaders" },
   { href: "#events", label: "Events & Cultural Day" },
   { href: "#contributions", label: "Welfare & Bereavement" },
   { href: "#news", label: "News & Communiqués" },
@@ -90,11 +90,11 @@ export default function Footer() {
                 <span className="text-xl font-extrabold tracking-tight text-white" style={{ fontFamily: "var(--font-outfit)" }}>
                   mulembe<span className="text-[#DDA71D]">18</span>
                 </span>
-                <div className="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold">Mombasa Coastal Chapter</div>
+                <div className="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold">Kenya Chapter</div>
               </div>
             </div>
             <p className="text-xs text-emerald-200/80 leading-relaxed max-w-sm">
-              Mulembe18 is the unifying welfare and cultural association for Luhya community members resident across the Coastal counties of Kenya.
+              Mulembe18 is the unifying welfare and cultural association for Luhya community members resident across Kenya.
             </p>
             {/* Socials */}
             <div className="flex items-center gap-2 pt-1">
@@ -193,7 +193,7 @@ export default function Footer() {
 
         {/* Copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-emerald-300/60 gap-4">
-          <p>© 2025 Mulembe18 Community Welfare Association (Mombasa Chapter). All Rights Reserved.</p>
+          <p>© 2025 Mulembe18 Community Welfare Association (Kenya Chapter). All Rights Reserved.</p>
           <div className="flex items-center gap-5">
             <a href="#" className="hover:text-white transition-colors">Constitution &amp; By-Laws</a>
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>

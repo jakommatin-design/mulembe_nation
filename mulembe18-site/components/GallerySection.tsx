@@ -101,7 +101,7 @@ export default function GallerySection() {
             </div>
 
             <p className="text-xs sm:text-sm text-gray-600 max-w-xl">
-              Celebrating our vibrant unity, ceremonies, youth sporting events, and cultural festivals across Mombasa.
+              Celebrating our vibrant unity, ceremonies, youth sporting events, and cultural festivals across Kenya.
             </p>
           </div>
 
@@ -110,7 +110,7 @@ export default function GallerySection() {
               className="text-xs font-bold text-[#0D6E38] bg-amber-50 border border-amber-200/80 px-3 py-1 rounded-full rotate-1 shadow-xs"
               style={{ fontFamily: "var(--font-kalam), cursive" }}
             >
-              Capturing 18 Luhya Sub-Tribes at the Coast
+              Capturing 18 Luhya Sub-Tribes Across Kenya
             </span>
             <span className="text-[11px] text-gray-400 font-medium">Updated live by community media desk</span>
           </div>

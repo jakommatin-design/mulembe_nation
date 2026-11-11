@@ -99,9 +99,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { areas: bulkAreas, name, ward, subcounty, county, description, contactInfo } = body;
 
-    // Helper to validate and enforce ward leader jurisdiction
-    const enforceWardAccess = (targetWard: string, targetSubcounty: string) => {
-      if (caller.role === "super_admin") return true;
+    // Helper to validate and enforce leadership jurisdiction
+    const enforceWardAccess = (targetWard: string, targetSubcounty: string, targetCounty?: string) => {
+      if (caller.role === "super_admin" || caller.role === "national_leader") return true;
+      if (caller.role === "county_leader") {
+        const cCounty = caller.county_leader_county || caller.county || "Mombasa";
+        return !targetCounty || targetCounty.toLowerCase() === cCounty.toLowerCase();
+      }
       if (caller.role === "subcounty_admin") {
         return (
           caller.subcounty_admin_zone?.toLowerCase() === targetSubcounty.toLowerCase()

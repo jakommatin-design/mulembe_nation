@@ -23,7 +23,7 @@ import {
   Building2,
   Compass,
 } from "lucide-react";
-import { getCounties, getSubcounties, getWards } from "@/lib/locations";
+import { getCounties, getSubcounties, getWards, KENYA_COUNTIES, isValidCounty } from "@/lib/locations";
 
 const clans = [
   "Bukusu",
@@ -77,6 +77,22 @@ export default function RegisterPage() {
   const availableWards = useMemo(() => {
     return getWards(form.subcounty, form.county);
   }, [form.subcounty, form.county]);
+
+  // Whenever county changes, reset subcounty and ward
+  const handleCountyChange = (newCounty: string) => {
+    const subcounties = getSubcounties(newCounty);
+    const firstSub = subcounties[0] || "";
+    const wards = getWards(firstSub, newCounty);
+    const firstWard = wards[0] || "";
+    setForm((prev) => ({
+      ...prev,
+      county: newCounty,
+      subcounty: firstSub,
+      ward: firstWard,
+      areaId: "",
+      areaName: "",
+    }));
+  };
 
   // Whenever subcounty changes, reset ward to the first ward in that subcounty
   const handleSubcountyChange = (newSubcounty: string) => {
@@ -206,12 +222,16 @@ export default function RegisterPage() {
       }
     }
 
+    if (!form.county || !isValidCounty(form.county)) {
+      newErrors.county = "Please select a valid Kenyan county.";
+    }
+
     if (!form.subcounty) {
-      newErrors.subcounty = "Please select your subcounty.";
+      newErrors.subcounty = "Please provide your subcounty.";
     }
 
     if (!form.ward) {
-      newErrors.ward = "Please select your ward.";
+      newErrors.ward = "Please provide your ward.";
     }
 
     if (!form.subClan) {
@@ -386,10 +406,10 @@ export default function RegisterPage() {
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ fontFamily: "var(--font-outfit)" }}>
-                  Join Mulembe18 Coastal Chapter
+                  Join Mulembe18 Kenya Chapter
                 </h1>
                 <p className="text-xs sm:text-sm text-emerald-100/90">
-                  Register your clan affiliation and residential location (Subcounty &gt; Ward &gt; Area).
+                  Register your clan affiliation and residential location (County &gt; Subcounty &gt; Ward &gt; Area).
                 </p>
               </div>
             </div>
@@ -501,16 +521,20 @@ export default function RegisterPage() {
                     </div>
                     <select
                       value={form.county}
-                      onChange={(e) => setForm({ ...form, county: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
+                      onChange={(e) => handleCountyChange(e.target.value)}
+                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold ${
+                        errors.county ? "border-rose-300 ring-2 ring-rose-100" : "border-gray-200"
+                      }`}
                     >
-                      {getCounties().map((c) => (
+                      <option value="">Select County (All 47 Counties)</option>
+                      {KENYA_COUNTIES.map((c) => (
                         <option key={c} value={c}>
                           {c} County
                         </option>
                       ))}
                     </select>
                   </div>
+                  {errors.county && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.county}</p>}
                 </div>
 
                 {/* Subcounty */}
@@ -522,17 +546,31 @@ export default function RegisterPage() {
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                       <MapPin size={15} />
                     </div>
-                    <select
-                      value={form.subcounty}
-                      onChange={(e) => handleSubcountyChange(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
-                    >
-                      {availableSubcounties.map((sc) => (
-                        <option key={sc} value={sc}>
-                          {sc} Subcounty
-                        </option>
-                      ))}
-                    </select>
+                    {availableSubcounties.length > 0 ? (
+                      <select
+                        value={form.subcounty}
+                        onChange={(e) => handleSubcountyChange(e.target.value)}
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold ${
+                          errors.subcounty ? "border-rose-300 ring-2 ring-rose-100" : "border-gray-200"
+                        }`}
+                      >
+                        {availableSubcounties.map((sc) => (
+                          <option key={sc} value={sc}>
+                            {sc} Subcounty
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={form.subcounty}
+                        onChange={(e) => handleSubcountyChange(e.target.value)}
+                        placeholder="e.g. Subcounty / Constituency"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold ${
+                          errors.subcounty ? "border-rose-300 ring-2 ring-rose-100" : "border-gray-200"
+                        }`}
+                      />
+                    )}
                   </div>
                   {errors.subcounty && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.subcounty}</p>}
                 </div>
@@ -542,23 +580,37 @@ export default function RegisterPage() {
                 {/* Ward */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                    Ward <span className="text-rose-500">* (Dependent on Subcounty)</span>
+                    Ward <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                       <Compass size={15} />
                     </div>
-                    <select
-                      value={form.ward}
-                      onChange={(e) => setForm({ ...form, ward: e.target.value, areaId: "", areaName: "" })}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold"
-                    >
-                      {availableWards.map((w) => (
-                        <option key={w} value={w}>
-                          {w} Ward
-                        </option>
-                      ))}
-                    </select>
+                    {availableWards.length > 0 ? (
+                      <select
+                        value={form.ward}
+                        onChange={(e) => setForm({ ...form, ward: e.target.value, areaId: "", areaName: "" })}
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold ${
+                          errors.ward ? "border-rose-300 ring-2 ring-rose-100" : "border-gray-200"
+                        }`}
+                      >
+                        {availableWards.map((w) => (
+                          <option key={w} value={w}>
+                            {w} Ward
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={form.ward}
+                        onChange={(e) => setForm({ ...form, ward: e.target.value, areaId: "", areaName: "" })}
+                        placeholder="e.g. Ward"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs bg-white focus:border-[#0D6E38] focus:ring-2 focus:ring-emerald-100 transition-all outline-hidden font-semibold ${
+                          errors.ward ? "border-rose-300 ring-2 ring-rose-100" : "border-gray-200"
+                        }`}
+                      />
+                    )}
                   </div>
                   {errors.ward && <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.ward}</p>}
                 </div>

@@ -23,9 +23,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/member-directory`,
+      url: `${baseUrl}/national-leaders`,
       lastModified: currentDate,
-      changeFrequency: "daily",
+      changeFrequency: "weekly",
       priority: 0.8,
     },
   ];

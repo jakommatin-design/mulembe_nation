@@ -88,7 +88,7 @@ export default function LeadershipSection() {
           </div>
 
           <p className="text-xs sm:text-sm text-gray-600 mt-1 max-w-lg mx-auto">
-            Dedicated servant leaders steering Mulembe18&apos;s community welfare, cultural preservation, and youth empowerment across Mombasa County.
+            Dedicated servant leaders steering Mulembe18&apos;s community welfare, cultural preservation, and youth empowerment across Kenya.
           </p>
         </div>
 

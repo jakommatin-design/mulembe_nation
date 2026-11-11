@@ -12,7 +12,7 @@ const navLinks = [
   { href: "/#news", label: "News" },
   { href: "/#gallery", label: "Gallery" },
   { href: "/#leadership", label: "Leadership" },
-  { href: "/member-directory", label: "Members Directory" },
+  { href: "/national-leaders", label: "National Leaders" },
   { href: "/#contact", label: "Contact" },
 ];
 
@@ -48,7 +48,7 @@ export default function Header() {
               <div className="w-10 h-10 rounded-full overflow-hidden bg-emerald-50 border-2 border-[#0D6E38]/30 flex items-center justify-center p-0.5 group-hover:scale-105 transition-transform shadow-xs">
                 <img
                   src="/images/logo.png"
-                  alt="Mulembe18 Coastal Chapter Logo"
+                  alt="Mulembe18 Kenya Logo"
                   className="w-full h-full object-contain rounded-full"
                 />
               </div>
